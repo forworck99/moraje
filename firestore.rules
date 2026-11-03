@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isTeacher() {
+      return signedIn()
+        && request.auth.token.email == 'forworck99@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function ownsOrTeacher(uid) { return signedIn() && (request.auth.uid == uid || isTeacher()); }
+
+    // Student profiles
+    match /users/{uid} {
+      allow read: if ownsOrTeacher(uid);
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'student';
+      allow update: if isTeacher()
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
+      allow delete: if isTeacher();
+
+      // Activity log: append-only, server time enforced, nobody can edit or delete
+      match /events/{eid} {
+        allow read: if ownsOrTeacher(uid);
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.ts == request.time
+          && request.resource.data.type is string;
+        allow update, delete: if false;
+      }
+    }
+
+    // Assignments, word marks and tests: teacher writes, the student only reads her own
+    match /assignments/{id} {
+      allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
+      allow write: if isTeacher();
+    }
+    match /highlights/{id} {
+      allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
+      allow write: if isTeacher();
+    }
+    match /tests/{id} {
+      allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
+      allow write: if isTeacher();
+    }
+  }
+}

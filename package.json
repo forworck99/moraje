@@ -1,0 +1,11 @@
+{
+  "name": "moraje",
+  "private": true,
+  "version": "1.0.0",
+  "description": "تطبيق مُراجِع لمراجعة القرآن وتتبع الطالبة",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=esm --minify --target=es2020 --loader:.rules=text --outfile=app.js"
+  },
+  "dependencies": { "firebase": "13.2.0" },
+  "devDependencies": { "esbuild": "^0.25.0" }
+}
