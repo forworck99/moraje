@@ -88,6 +88,21 @@ function start(u) {
   if (isTeacherEmail(u.email)) {
     if (!u.emailVerified) return verifyScreen(u);
     app.role = 'teacher';
+    // make sure the ID token carries email_verified=true before querying
+    store.refreshUser().catch(() => { }).finally(() => app.role === 'teacher' && watchTeacher());
+    app.render();
+    return;
+  } else {
+    app.role = 'student';
+    store.ensureProfile(u).catch(onErr);
+    app.tracker = new Tracker(store, u.uid);
+    watchStudent(u.uid);
+    app.render();
+  }
+}
+
+function watchTeacher() {
+  {
     app.subs.push(store.watchStudents(list => {
       app.permError = false;
       app.students = list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
@@ -97,13 +112,6 @@ function start(u) {
       }
       app.render();
     }, onErr));
-    app.render();
-  } else {
-    app.role = 'student';
-    store.ensureProfile(u).catch(onErr);
-    app.tracker = new Tracker(store, u.uid);
-    watchStudent(u.uid);
-    app.render();
   }
 }
 
