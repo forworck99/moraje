@@ -26,7 +26,9 @@ export function studentHome(app) {
     const sec = app.timeToday[a.id] || 0;
     const pages = rangePages(a.from, a.to);
     const done = n >= t;
-    const pos = savedPos(a.id);
+    let pos = savedPos(a.id);
+    // a teacher reset (this assignment or everything) also clears where she stopped
+    if (pos && (pos.at || 0) < Math.max(a.resetAt || 0, app.resetAll || 0)) { clearPos(a.id); pos = null; }
     const canResume = pos && pos.page && pages.includes(pos.page) && !done;
     return h('article', { class: 'acard' + (done ? ' done' : ''), style: { '--tc': T.color } },
       h('div', { class: 'acard-top' },
