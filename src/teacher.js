@@ -2,7 +2,7 @@
 import { h, toast, modal, confirmBox, fmtDur, fmtTime, dayName, addDays, shortDate } from './ui.js';
 import { todayStr } from './store.js';
 import { rangeLabel, surahName, surahVerses, SURAH_ORDER, rangePages, verseIndex, arNum } from './data.js';
-import { TYPES, TYPE_ORDER } from './types.js';
+import { TYPES, TYPE_ORDER, targetOf, unitOf, modeOf, isPageMode } from './types.js';
 import { breakdown } from './stats.js';
 import { openReader } from './reader.js';
 import { topbar } from './student.js';
@@ -27,7 +27,7 @@ export function teacherHome(app) {
   }
 
   const stu = app.students.find(s => s.id === app.sel) || app.students[0];
-  const days = breakdown(app.weekEvents || []);
+  const days = breakdown(app.weekEvents || [], app.assignments);
   const tabs = [['grid', 'المتابعة'], ['log', 'السجل'], ['assign', 'الواجبات'], ['tests', 'الاختبارات']];
 
   const body = { grid: gridTab, log: logTab, assign: assignTab, tests: testsTab }[T.tab](app, stu, days, today);
@@ -69,9 +69,9 @@ function gridTab(app, stu, days, today) {
       h('thead', {}, h('tr', {}, h('th', {}, 'الواجب'), wd.map(d => h('th', { class: d === today ? 'today' : '' }, dayName(d).replace('ال', ''), h('br'), h('small', {}, shortDate(d)))))),
       h('tbody', {},
         as.map(a => {
-          const t = a.target || TYPES[a.type].target;
+          const t = targetOf(a);
           return h('tr', {},
-            h('th', { class: 'aname', style: { '--tc': TYPES[a.type].color } }, h('span', { class: 'tag sm' }, TYPES[a.type].short), h('div', {}, rangeLabel(a.from, a.to)), h('small', {}, `المطلوب ${t} يوميًا`)),
+            h('th', { class: 'aname', style: { '--tc': TYPES[a.type].color } }, h('span', { class: 'tag sm' }, TYPES[a.type].short), h('div', {}, rangeLabel(a.from, a.to)), h('small', {}, `المطلوب ${t} ${unitOf(a)} يوميًا`)),
             wd.map(d => {
               const n = days[d]?.counts[a.id] || 0, sec = days[d]?.time[a.id] || 0;
               const st = status(n, t, d, today, a);
@@ -112,6 +112,15 @@ function logTab(app, stu, days, today) {
           e.readSec != null ? ` · وقت فعلي على الصفحة ${fmtDur(e.readSec)}` : '',
           e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ أسرع من المعقول (أقل من ${fmtDur(e.minSec)})`) : '',
           e.skew ? h('span', { class: 'warn' }, ' · سُجّلت دون إنترنت') : '')));
+    if (e.kind === 'page') return h('li', { class: 'lg-count' + (e.suspicious ? ' sus' : '') },
+      h('span', { class: 'lt' }, fmtTime(e.t)),
+      h('div', {}, h('b', {}, `📄 قرأت صفحة ${e.page}`), ` (${e.n}) · ${aName(e.aid)}`,
+        h('div', { class: 'muted' },
+          e.readSec != null ? `وقت فعلي على الصفحة ${fmtDur(e.readSec)}` : '',
+          e.interval != null ? ` · بعد ${fmtDur(e.interval)} من السابقة` : '',
+          e.again ? ' · سبق تسجيلها اليوم' : '',
+          e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ أسرع من المعقول (أقل من ${fmtDur(e.minSec)})`) : '')));
+    if (e.kind === 'pundo') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ ألغت تسجيل صفحة ${e.page}`), ` · ${aName(e.aid)}`));
     if (e.kind === 'adjust') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ تعديل العدد من ${e.from} إلى ${e.to}`), ` · ${aName(e.aid)}`));
     if (e.kind === 'open') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, '🔓 فتحت التطبيق'));
     if (e.kind === 'close') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `🔒 أغلقت التطبيق${e.sec ? ` (جلسة نشطة ${fmtDur(e.sec)})` : ''}`));
@@ -130,23 +139,36 @@ function assignTab(app, stu, days, today) {
   const list = app.assignments.slice().sort((a, b) => (b.start || '').localeCompare(a.start || '') || TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type));
   return h('section', {},
     h('button', { class: 'btn primary block', onclick: () => editAssignment(app, stu) }, '+ واجب جديد'),
+    list.length ? h('button', { class: 'btn ghost block', onclick: () => resetCounters(app, list) }, '⟲ تصفير كل العدادات') : null,
     h('div', { class: 'alist' }, list.map(a => {
       const T = TYPES[a.type];
       const cur = a.active !== false && (!a.start || a.start <= today) && (!a.end || a.end >= today);
       return h('div', { class: 'aitem' + (cur ? '' : ' off'), style: { '--tc': T.color } },
         h('div', {}, h('span', { class: 'tag sm' }, T.label), cur ? h('span', { class: 'live' }, 'جارٍ') : h('span', { class: 'muted' }, a.active === false ? ' موقوف' : ' خارج المدة'),
           h('h4', {}, rangeLabel(a.from, a.to)),
-          h('small', { class: 'muted' }, `${a.target} مرة يوميًا · ${a.start ? shortDate(a.start) : ''} – ${a.end ? shortDate(a.end) : '…'} · صفحات ${(p => p.length > 4 ? p[0] + '–' + p[p.length - 1] : p.join('، '))(rangePages(a.from, a.to))}`)),
+          h('small', { class: 'muted' }, `${isPageMode(a) ? `كل صفحة مرة (${targetOf(a)} صفحة)` : `${targetOf(a)} مرة`} يوميًا${a.resetAt ? ` · صُفِّر ${shortDate(todayStr(new Date(a.resetAt)))}` : ''} · ${a.start ? shortDate(a.start) : ''} – ${a.end ? shortDate(a.end) : '…'} · صفحات ${(p => p.length > 4 ? p[0] + '–' + p[p.length - 1] : p.join('، '))(rangePages(a.from, a.to))}`)),
         h('div', { class: 'aact' },
           h('button', { class: 'btn ghost sm', onclick: () => editAssignment(app, stu, a) }, 'تعديل'),
+          h('button', { class: 'btn ghost sm', onclick: () => resetCounters(app, [a]) }, 'تصفير'),
           h('button', { class: 'btn danger-ghost sm', onclick: async () => { if (await confirmBox('حذف الواجب', 'سيُحذف الواجب، ويبقى سجل قراءاته محفوظًا.', 'حذف', 'إلغاء', 'danger')) { await app.store.deleteAssignment(a.id); toast('حُذف'); } } }, 'حذف')));
     })),
     h('details', { class: 'help' }, h('summary', {}, 'كيف أضبط الواجبات؟'),
       h('ul', {},
         h('li', {}, 'الحفظ الجديد: نصف صفحة، 15 مرة يوميًا طوال الأسبوع.'),
         h('li', {}, 'الحفظ القديم: صفحة، 15 مرة يوميًا.'),
-        h('li', {}, 'الحفظ الحديث: الصفحات التي تجاوزتها، مرة واحدة يوميًا. يمكنك إضافة أكثر من نطاق.'),
-        h('li', {}, 'مراجعة: أي نطاق تختاره، ولو امتد من سورة إلى أخرى.'))));
+        h('li', {}, 'الحفظ الحديث والمراجعة: تسحب الطالبة بعد إكمال كل صفحة، فتعرف كم صفحة قرأت من النطاق.'),
+        h('li', {}, 'زر «تصفير» يبدأ العدّ من الصفر، ويبقى السجل القديم محفوظًا دون أن يُحسب.'))));
+}
+
+async function resetCounters(app, list) {
+  const one = list.length === 1;
+  const ok = await confirmBox('تصفير العداد', one
+    ? `تصفير عدّاد «${rangeLabel(list[0].from, list[0].to)}»؟ لن تُحسب القراءات والأوقات السابقة لهذا الواجب.`
+    : 'تصفير عدّادات كل الواجبات؟ لن تُحسب القراءات والأوقات السابقة.', 'تصفير', 'إلغاء', 'danger');
+  if (!ok) return;
+  const now = Date.now();
+  for (const a of list) await app.store.saveAssignment({ id: a.id, resetAt: now });
+  toast('صُفِّر العداد ✓');
 }
 
 function editAssignment(app, stu, a) {
@@ -162,6 +184,12 @@ function editAssignment(app, stu, a) {
   const en = h('input', { class: 'inp', type: 'date', value: v.end || addDays(today, 6) });
   const note = h('input', { class: 'inp', placeholder: 'ملاحظة للطالبة (اختياري)', value: v.note || '' });
   const active = h('input', { type: 'checkbox', checked: v.active !== false });
+  const modeSel = h('select', { class: 'inp' },
+    h('option', { value: 'range', selected: modeOf(v) === 'range' }, 'عدّ قراءة النطاق كاملًا (مثل 15 مرة)'),
+    h('option', { value: 'page', selected: modeOf(v) === 'page' }, 'كل صفحة مرة: تسحب بعد إكمال كل صفحة'));
+  const targetLbl = h('label', {}, 'المطلوب يوميًا', target);
+  const syncMode = () => { targetLbl.style.display = modeSel.value === 'page' ? 'none' : ''; };
+  modeSel.addEventListener('change', syncMode);
   const preview = h('div', { class: 'preview' });
   const read = () => {
     const c = (s, x) => Math.min(surahVerses(+s.value), Math.max(1, +x.value || 1));
@@ -171,14 +199,16 @@ function editAssignment(app, stu, a) {
   };
   const upd = () => { const r = read(); preview.textContent = `${rangeLabel(r.from, r.to)} · صفحات ${rangePages(r.from, r.to).join('، ')}`; };
   [fS, fA, tS, tA].forEach(x => x.addEventListener('input', upd));
-  typeSel.addEventListener('change', () => { target.value = TYPES[typeSel.value].target; });
+  typeSel.addEventListener('change', () => { target.value = TYPES[typeSel.value].target; modeSel.value = modeOf({ type: typeSel.value }); syncMode(); });
+  syncMode();
   upd();
   const body = h('div', { class: 'form' },
     h('label', {}, 'النوع', typeSel),
     h('div', { class: 'frow' }, h('label', {}, 'من سورة', fS), h('label', {}, 'آية', fA)),
     h('div', { class: 'frow' }, h('label', {}, 'إلى سورة', tS), h('label', {}, 'آية', tA)),
     preview,
-    h('div', { class: 'frow' }, h('label', {}, 'المطلوب يوميًا', target), h('label', {}, 'تكرار الآية في التلاوة', ar), h('label', {}, 'تكرار النطاق', rr)),
+    h('label', {}, 'طريقة العدّ', modeSel),
+    h('div', { class: 'frow' }, targetLbl, h('label', {}, 'تكرار الآية في التلاوة', ar), h('label', {}, 'تكرار النطاق', rr)),
     h('div', { class: 'frow' }, h('label', {}, 'من تاريخ', st), h('label', {}, 'إلى تاريخ', en)),
     h('label', {}, 'ملاحظة', note),
     h('label', { class: 'check' }, active, ' واجب فعّال'));
@@ -188,7 +218,7 @@ function editAssignment(app, stu, a) {
       const r = read();
       await app.store.saveAssignment({
         id: a?.id, studentUid: stu.id, type: typeSel.value, from: r.from, to: r.to,
-        target: Math.max(1, +target.value || 1), ayahRepeat: Math.max(1, +ar.value || 1), rangeRepeat: Math.max(0, +rr.value || 0),
+        mode: modeSel.value, target: Math.max(1, +target.value || 1), ayahRepeat: Math.max(1, +ar.value || 1), rangeRepeat: Math.max(0, +rr.value || 0),
         start: st.value || today, end: en.value || '', note: note.value.trim(), active: active.checked
       });
       toast('حُفظ الواجب ✓');
@@ -237,10 +267,10 @@ function shareReport(app, stu, days) {
   const today = todayStr();
   const lines = [`📖 تقرير مُراجِع — ${stu.name || ''}`, `الأسبوع ${shortDate(wd[0])} – ${shortDate(wd[6])}`, ''];
   for (const a of app.assignments.filter(a => (!a.start || a.start <= wd[6]) && (!a.end || a.end >= wd[0]))) {
-    const t = a.target;
+    const t = targetOf(a);
     const marks = wd.filter(d => d <= today && (!a.start || d >= a.start) && (!a.end || d <= a.end))
       .map(d => { const n = days[d]?.counts[a.id] || 0; return `${dayName(d).replace('ال', '')}: ${n >= t ? '🟢' : n ? '🟡' : '🔴'}${n}`; });
-    lines.push(`▪️ ${TYPES[a.type].label} (${rangeLabel(a.from, a.to)}) — المطلوب ${t} يوميًا`, marks.join(' | '), '');
+    lines.push(`▪️ ${TYPES[a.type].label} (${rangeLabel(a.from, a.to)}) — المطلوب ${t} ${unitOf(a)} يوميًا`, marks.join(' | '), '');
   }
   const total = wd.reduce((s, d) => s + (days[d]?.total || 0), 0);
   const act = wd.filter(d => days[d]?.total).length;

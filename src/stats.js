@@ -4,6 +4,9 @@ export function sortEvents(evs) {
 }
 
 // Count totals per assignment for one day's events
+function resetMap(assignments) { const m = {}; for (const a of assignments || []) if (a.resetAt) m[a.id] = a.resetAt; return m; }
+const before = (e, R) => e.assignmentId && R[e.assignmentId] && (e.ts || e.clientTs || 0) < R[e.assignmentId];
+
 export function countsFor(evs) {
   const out = {};
   for (const e of sortEvents(evs)) {
@@ -21,11 +24,13 @@ export function timeFor(evs) {
 }
 
 // Full breakdown: day -> { counts:{aid:n}, time:{aid:sec}, total:sec, pages:{p:sec}, log:[...], first, last }
-export function breakdown(evs) {
+export function breakdown(evs, assignments) {
   const days = {};
   const lastCount = {};
+  const R = resetMap(assignments);
   for (const e of sortEvents(evs)) {
-    const d = days[e.day] ||= { counts: {}, time: {}, listen: 0, total: 0, pages: {}, log: [], first: null, last: null, sessions: 0, flags: 0 };
+    if (before(e, R)) continue;              // teacher reset this assignment's counter
+    const d = days[e.day] ||= { counts: {}, time: {}, listen: 0, total: 0, pages: {}, log: [], first: null, last: null, sessions: 0, flags: 0, done: {} };
     const t = e.ts || e.clientTs;
     d.first = d.first ? Math.min(d.first, t) : t;
     d.last = d.last ? Math.max(d.last, t) : t;
@@ -49,6 +54,25 @@ export function breakdown(evs) {
       const aid = e.assignmentId;
       d.counts[aid] = Math.max(0, (d.counts[aid] || 0) + (e.delta || 0));
       d.log.push({ kind: 'adjust', t, aid, delta: e.delta, from: e.from, to: e.to });
+    } else if (e.type === 'page_done') {
+      const aid = e.assignmentId;
+      const set = d.done[aid] ||= new Set();
+      const key = e.day + aid;
+      const interval = lastCount[key] ? Math.round((t - lastCount[key]) / 1000) : null;
+      lastCount[key] = t;
+      const minSec = e.minSec || 0;
+      const suspicious = (e.readSec ?? 999999) < minSec;
+      if (suspicious) d.flags++;
+      const again = set.has(e.page);
+      set.add(e.page);
+      d.counts[aid] = set.size;
+      d.log.push({ kind: 'page', t, aid, page: e.page, n: set.size, interval, readSec: e.readSec, minSec, suspicious, again });
+    } else if (e.type === 'page_undo') {
+      const aid = e.assignmentId;
+      const set = d.done[aid] ||= new Set();
+      set.delete(e.page);
+      d.counts[aid] = set.size;
+      d.log.push({ kind: 'pundo', t, aid, page: e.page });
     } else if (e.type === 'session_start') {
       d.sessions++;
       d.log.push({ kind: 'open', t });

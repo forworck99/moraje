@@ -85,3 +85,10 @@ export function rangeLabel(from, to) {
   if (s1 === s2) return `${surahName(+s1)} ${a1} – ${a2}`;
   return `${surahName(+s1)} ${a1} – ${surahName(+s2)} ${a2}`;
 }
+
+// words of the range that sit on page p
+export function pageRangeWordCount(p, from, to) {
+  let n = 0;
+  for (const line of M.pages[p].lines) for (const w of line) if (w[1] === 'w' && w[2] && inRange(w[2], from, to)) n++;
+  return n;
+}

@@ -2,7 +2,7 @@
 import { h, fmtDur, dayName, addDays, shortDate, confirmBox } from './ui.js';
 import { todayStr } from './store.js';
 import { rangeLabel, rangePages, arNum } from './data.js';
-import { TYPES, TYPE_ORDER } from './types.js';
+import { TYPES, TYPE_ORDER, targetOf, unitOf } from './types.js';
 import { breakdown } from './stats.js';
 import { openReader } from './reader.js';
 
@@ -15,13 +15,13 @@ export function activeAssignments(list, day = todayStr()) {
 export function studentHome(app) {
   if (app.reader) { app.reader.updCounter?.(); app.reader.repaint?.(); return; }
   const today = todayStr();
-  const days = breakdown(app.weekEvents || []);
+  const days = breakdown(app.weekEvents || [], app.assignments);
   const act = activeAssignments(app.assignments, today);
   const week = [...Array(7)].map((_, i) => addDays(today, i - 6));
 
   const card = a => {
     const T = TYPES[a.type] || TYPES.review;
-    const n = app.counts[a.id] || 0, t = a.target || T.target;
+    const n = app.counts[a.id] || 0, t = targetOf(a);
     const sec = app.timeToday[a.id] || 0;
     const pages = rangePages(a.from, a.to);
     const done = n >= t;
@@ -33,7 +33,7 @@ export function studentHome(app) {
       h('div', { class: 'muted' }, `${pages.length > 1 ? 'الصفحات' : 'الصفحة'} ${pages.length > 4 ? pages[0] + '–' + pages[pages.length - 1] : pages.join('، ')}`),
       a.note ? h('p', { class: 'note' }, '📌 ', a.note) : null,
       h('div', { class: 'prog-row' },
-        h('div', { class: 'big' }, h('b', {}, n), ` / ${t}`),
+        h('div', { class: 'big' }, h('b', {}, n), ` / ${t} ${unitOf(a)}`),
         h('div', { class: 'bar' }, h('i', { style: { width: Math.min(100, n / t * 100) + '%' } })),
         h('small', { class: 'muted' }, fmtDur(sec))),
       h('div', { class: 'week' }, week.map(d => {

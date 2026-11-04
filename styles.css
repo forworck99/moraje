@@ -242,3 +242,15 @@ html.fallback .fb-head { font-family: 'Amiri Quran', serif; font-size: calc(var(
   body { background: #fff; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* page-mode counter (review: one swipe per page) */
+.counter.pm { grid-template-columns: auto 1fr auto; }
+.pdots { grid-column: 1 / -1; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-top: 2px; }
+.pdot { flex: none; min-width: 34px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--muted); cursor: pointer; }
+.pdot.ok { background: var(--g); color: var(--gi); border-color: transparent; font-weight: 700; }
+.pdot.cur { outline: 2px solid var(--primary); outline-offset: 1px; }
+.track.off { opacity: .7; }
+.track.off .thumb { background: var(--gi); cursor: default; }
+.reader { grid-template-columns: minmax(0, 1fr); }
+.reader > *, .counter > * { min-width: 0; }
+.counter.pm { grid-template-columns: auto minmax(0, 1fr) auto; }

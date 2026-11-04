@@ -118,18 +118,21 @@ function watchTeacher() {
 let studentSubs = [];
 function watchStudent(uid) {
   studentSubs.forEach(f => f()); studentSubs = [];
-  app.assignments = []; app.marks = new Map(); app.weekEvents = []; app.tests = []; app.counts = {}; app.timeToday = {};
+  app.assignments = []; app.marks = new Map(); app.weekEvents = []; app.tests = []; app.counts = {}; app.timeToday = {}; app.doneToday = {};
   if (!uid) return;
   const today = todayStr();
   app.day = today;
   const rer = () => app.render();
-  studentSubs.push(store.watchAssignments(uid, l => { app.assignments = l; rer(); }, onErr));
+  const recompute = () => {
+    const d = breakdown(app.weekEvents, app.assignments)[todayStr()] || { counts: {}, time: {}, done: {} };
+    app.counts = d.counts; app.timeToday = d.time; app.doneToday = d.done || {};
+  };
+  studentSubs.push(store.watchAssignments(uid, l => { app.assignments = l; recompute(); rer(); }, onErr));
   studentSubs.push(store.watchHighlights(uid, l => { app.marks = new Map(l.map(x => [`${x.vk}:${x.pos}`, x])); rer(); }, onErr));
   const from = addDays(today, app.role === 'teacher' ? -60 : -6);
   studentSubs.push(store.watchEventsSince(uid, from, evs => {
     app.weekEvents = evs;
-    const d = breakdown(evs)[todayStr()] || { counts: {}, time: {} };
-    app.counts = d.counts; app.timeToday = d.time;
+    recompute();
     rer();
   }, onErr));
   if (app.role === 'teacher') studentSubs.push(store.watchTests(uid, l => { app.tests = l; rer(); }, onErr));

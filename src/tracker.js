@@ -7,6 +7,7 @@ export class Tracker {
     this.pages = []; this.aid = null;
     this.acc = new Map();          // `${page}|${aid}` -> {sec, listen}
     this.readSec = {};             // aid -> active seconds since last count
+    this.pageSec = {};             // `${aid}|${page}` -> active seconds since that page was last marked
     this.lastAct = Date.now();
     this.audioOn = false;
     this.sessionSec = 0;
@@ -37,7 +38,10 @@ export class Tracker {
       if (this.audioOn) a.listen += share;
       this.acc.set(k, a);
     }
-    if (this.aid) this.readSec[this.aid] = (this.readSec[this.aid] || 0) + 1;
+    if (this.aid) {
+      this.readSec[this.aid] = (this.readSec[this.aid] || 0) + 1;
+      for (const p of this.pages) { const k = `${this.aid}|${p}`; this.pageSec[k] = (this.pageSec[k] || 0) + share; }
+    }
     this.onTick?.();
   }
   setContext(pages, aid) {
@@ -50,6 +54,7 @@ export class Tracker {
   }
   setAudio(on) { this.audioOn = on; if (on) this.lastAct = Date.now(); }
   takeReadSec(aid) { const s = Math.round(this.readSec[aid] || 0); this.readSec[aid] = 0; return s; }
+  takePageSec(aid, p) { const k = `${aid}|${p}`; const s = Math.round(this.pageSec[k] || 0); this.pageSec[k] = 0; return s; }
   peekReadSec(aid) { return Math.round(this.readSec[aid] || 0); }
   flush() {
     for (const [k, a] of this.acc) {

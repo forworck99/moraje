@@ -2,11 +2,11 @@
 import { h, toast, modal, confirmBox } from './ui.js';
 import {
   PAGE_LIST, versePage, pageVerses, rangeVerses, inRange, rangeLabel, surahName, surahVerses,
-  SURAH_ORDER, allVerses, rangeWordCount, arNum
+  SURAH_ORDER, allVerses, rangeWordCount, arNum, rangePages, pageRangeWordCount
 } from './data.js';
 import { renderPage, layoutPage, decorate, ensureFonts, fontsForPages } from './mushaf.js';
 import { RECITERS } from './audio.js';
-import { TYPES } from './types.js';
+import { TYPES, isPageMode, targetOf, unitOf } from './types.js';
 
 const MARK_COLORS = [
   { c: '#d32f2f', n: 'أحمر' }, { c: '#ef6c00', n: 'برتقالي' }, { c: '#1565c0', n: 'أزرق' }, { c: '#2e7d32', n: 'أخضر' }
@@ -26,7 +26,8 @@ export function openReader(ctx) {
   let follow = true;
   const cleanups = [];
   let scopeSel, fromS, fromA, toS, toA, ayahRepI, rangeRepI, recBtn, playBtn, statusEl, customRow;
-  let cntNum, cntBar, cntTime;
+  let cntNum, cntBar, cntTime, cntLabel, cntTrack, cntPages;
+  const PM = A ? isPageMode(A) : false;
   let lastErr = 0;
 
   const buildViews = () => {
@@ -89,6 +90,7 @@ export function openReader(ctx) {
     paint();
     pageSel.value = pages[0];
     app.tracker?.setContext(pages, A?.id);
+    if (counterEl) updCounter();
     if (scope === 'page' && !player.playing) setQueue();
     if (!keepFollow && !player.playing) follow = true;
   }
@@ -256,12 +258,12 @@ export function openReader(ctx) {
     cntNum = h('b', {}, '0');
     cntBar = h('div', { class: 'bar' }, h('i'));
     cntTime = h('small', {});
+    cntLabel = h('span', { class: 'track-label' }, 'اسحبي لتسجيل قراءة  ←');
     const thumb = h('div', { class: 'thumb', 'aria-hidden': 'true' }, '✓');
-    const track = h('div', { class: 'track', role: 'slider', 'aria-label': 'اسحبي لتسجيل قراءة', tabindex: 0 },
-      h('span', { class: 'track-label' }, 'اسحبي لتسجيل قراءة  ←'), thumb);
+    const track = cntTrack = h('div', { class: 'track', role: 'slider', 'aria-label': PM ? 'اسحبي بعد إكمال الصفحة' : 'اسحبي لتسجيل قراءة', tabindex: 0 }, cntLabel, thumb);
     let startX = null, max = 0, dx = 0;
     const setX = x => { thumb.style.transform = `translateX(${-x}px)`; track.style.setProperty('--p', (x / max) || 0); };
-    thumb.addEventListener('pointerdown', e => { startX = e.clientX; max = track.clientWidth - thumb.offsetWidth - 6; thumb.setPointerCapture(e.pointerId); track.classList.add('drag'); });
+    thumb.addEventListener('pointerdown', e => { if (track.classList.contains('off')) return; startX = e.clientX; max = track.clientWidth - thumb.offsetWidth - 6; thumb.setPointerCapture(e.pointerId); track.classList.add('drag'); });
     thumb.addEventListener('pointermove', e => { if (startX == null) return; dx = Math.min(max, Math.max(0, startX - e.clientX)); setX(dx); });
     const end = async () => {
       if (startX == null) return;
@@ -271,23 +273,55 @@ export function openReader(ctx) {
       if (done) await doCount();
     };
     thumb.addEventListener('pointerup', end); thumb.addEventListener('pointercancel', end);
-    track.addEventListener('keydown', e => { if (e.key === 'Enter') doCount(); });
-    const adj = h('button', { class: 'adj', 'aria-label': 'تعديل العدد', onclick: adjust }, '±');
-    return h('div', { class: 'counter' },
-      h('div', { class: 'cinfo' }, h('div', {}, cntNum, ` / ${A.target || 1}`, h('small', {}, ' اليوم')), cntBar, cntTime),
-      track, adj);
+    track.addEventListener('keydown', e => { if (e.key === 'Enter' && !track.classList.contains('off')) doCount(); });
+    const adj = h('button', { class: 'adj', 'aria-label': PM ? 'إلغاء تسجيل صفحة' : 'تعديل العدد', onclick: adjust }, '±');
+    cntPages = PM ? h('div', { class: 'pdots' }) : null;
+    return h('div', { class: 'counter' + (PM ? ' pm' : '') },
+      h('div', { class: 'cinfo' }, h('div', {}, cntNum, ` / ${targetOf(A)}`, h('small', {}, PM ? ' صفحة' : ' اليوم')), cntBar, cntTime),
+      track, adj, cntPages);
   }
   const curCount = () => app.counts[A.id] || 0;
+  const doneSet = () => app.doneToday?.[A.id] || new Set();
+  const rangeP = PM ? rangePages(A.from, A.to) : [];
+  // the page the slider will mark: first visible page of the range not yet marked today
+  const pageToMark = () => { const ds = doneSet(); return (views[vi] || []).filter(p => rangeP.includes(p) && !ds.has(p)).sort((a, b) => a - b)[0] ?? null; };
+
   async function doCount() {
+    if (PM) {
+      const p = pageToMark();
+      if (p == null) return;
+      const ok = await confirmBox('تسجيل صفحة', `هل أتممتِ قراءة الصفحة ${p} كاملة؟`, 'نعم، أتممتها');
+      if (!ok) return;
+      const readSec = app.tracker.takePageSec(A.id, p);
+      const minSec = Math.max(15, Math.round(pageRangeWordCount(p, A.from, A.to) * 0.45));
+      await app.store.logEvent(app.user.uid, 'page_done', { assignmentId: A.id, page: p, readSec, minSec });
+      const n = doneSet().size + (doneSet().has(p) ? 0 : 1), t = targetOf(A);
+      toast(n >= t ? `أحسنتِ! أتممتِ المراجعة كاملة: ${n} صفحة 🌟` : `سُجِّلت الصفحة ${p} ✓ (${n}/${t})`);
+      // move on to the next unread page of the range
+      const next = rangeP.find(x => x > p && !doneSet().has(x) && x !== p);
+      if (next && !views[vi].includes(next)) setTimeout(() => go(viewOf(next)), 500);
+      return;
+    }
     const n = curCount() + 1;
     const ok = await confirmBox('تسجيل قراءة', `هل أتممتِ قراءة «${rangeLabel(A.from, A.to)}» كاملة؟ ستُسجَّل القراءة رقم ${n}.`, 'نعم، أتممتها');
     if (!ok) return;
     const readSec = app.tracker.takeReadSec(A.id);
     const minSec = Math.max(15, Math.round(rangeWordCount(A.from, A.to) * 0.45));
     await app.store.logEvent(app.user.uid, 'count', { assignmentId: A.id, readSec, minSec, n });
-    toast(n >= (A.target || 1) ? `أحسنتِ! أتممتِ ${n} قراءات اليوم 🌟` : `سُجِّلت القراءة ${n} ✓`);
+    toast(n >= targetOf(A) ? `أحسنتِ! أتممتِ ${n} قراءات اليوم 🌟` : `سُجِّلت القراءة ${n} ✓`);
   }
   async function adjust() {
+    if (PM) {
+      const ds = [...doneSet()].sort((a, b) => a - b);
+      if (!ds.length) { toast('لا توجد صفحات مسجّلة اليوم'); return; }
+      const p = await modal({ title: 'إلغاء تسجيل صفحة', body: 'اختاري الصفحة التي سُجِّلت بالخطأ:', actions: [{ label: 'إلغاء', value: 0, kind: 'ghost' }, ...ds.map(x => ({ label: `صفحة ${x}`, value: x, kind: 'ghost' }))] });
+      if (!p) return;
+      if (!await confirmBox('تأكيد', `إلغاء تسجيل الصفحة ${p}؟`, 'نعم')) return;
+      if (!await confirmBox('تأكيد نهائي', 'هل أنتِ متأكدة فعلًا؟ سيُسجَّل هذا ويظهر للمعلم.', 'نعم، متأكدة', 'تراجع', 'danger')) return;
+      await app.store.logEvent(app.user.uid, 'page_undo', { assignmentId: A.id, page: p });
+      toast(`أُلغي تسجيل الصفحة ${p}`);
+      return;
+    }
     const n = curCount();
     const delta = await modal({ title: 'تعديل العدد', body: `العدد الحالي اليوم: ${n}. استخدمي هذا فقط إذا ضغطتِ بالخطأ.`, actions: [{ label: 'إلغاء', value: 0, kind: 'ghost' }, { label: '− إنقاص 1', value: -1, kind: 'ghost' }, { label: '+ زيادة 1', value: 1, kind: 'ghost' }] });
     if (!delta || (delta < 0 && n === 0)) return;
@@ -299,12 +333,21 @@ export function openReader(ctx) {
   }
   function updCounter() {
     if (!counterEl) return;
-    const n = curCount(), t = A.target || 1;
+    const n = curCount(), t = targetOf(A);
     cntNum.textContent = n;
     cntBar.firstChild.style.width = Math.min(100, n / t * 100) + '%';
     counterEl.classList.toggle('done', n >= t);
     const sec = (app.timeToday[A.id] || 0) + (app.tracker?.peekReadSec(A.id) || 0);
     cntTime.textContent = `وقت القراءة اليوم: ${Math.floor(sec / 60)} د`;
+    if (PM) {
+      const p = pageToMark();
+      const vis = (views[vi] || []).filter(x => rangeP.includes(x));
+      cntTrack.classList.toggle('off', p == null);
+      cntLabel.textContent = p != null ? `أكملتِ صفحة ${p}؟ اسحبي ←`
+        : vis.length ? `✓ ${vis.length > 1 ? 'الصفحتان مقروءتان' : 'الصفحة مقروءة'}` : 'هذه الصفحة خارج الواجب';
+      const ds = doneSet();
+      cntPages.replaceChildren(...rangeP.map(x => h('button', { class: 'pdot' + (ds.has(x) ? ' ok' : '') + ((views[vi] || []).includes(x) ? ' cur' : ''), title: `صفحة ${x}`, onclick: () => go(viewOf(x)) }, x)));
+    }
   }
   ctx.updCounter = updCounter;
   if (app.tracker) { const prev = app.tracker.onTick; app.tracker.onTick = () => { prev?.(); updCounter(); }; cleanups.push(() => { app.tracker.onTick = prev; }); }
