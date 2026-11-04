@@ -24,49 +24,54 @@ window.__app = app;
 
 const errMsg = e => {
   const c = e?.code || '';
-  if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return 'البريد أو كلمة المرور غير صحيحة';
-  if (c.includes('email-already-in-use')) return 'هذا البريد مسجّل مسبقًا، اختاري «دخول»';
-  if (c.includes('weak-password')) return 'كلمة المرور قصيرة، استخدمي 6 أحرف على الأقل';
-  if (c.includes('invalid-email')) return 'البريد الإلكتروني غير صحيح';
-  if (c.includes('network')) return 'لا يوجد اتصال بالإنترنت';
-  if (c.includes('too-many-requests')) return 'محاولات كثيرة، انتظري قليلًا ثم أعيدي المحاولة';
-  return 'حدث خطأ: ' + (e?.message || c);
+  if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return 'Wrong email or password';
+  if (c.includes('email-already-in-use')) return 'This email already has an account. Choose "Sign in".';
+  if (c.includes('weak-password')) return 'Password too short: use at least 6 characters';
+  if (c.includes('invalid-email')) return 'Invalid email address';
+  if (c.includes('network')) return 'No internet connection';
+  if (c.includes('too-many-requests')) return 'Too many tries. Wait a little and try again.';
+  return 'Error: ' + (e?.message || c);
 };
 
+const setLang = en => { document.documentElement.lang = en ? 'en' : 'ar'; document.documentElement.dir = en ? 'ltr' : 'rtl'; };
+
 function authScreen(mode = 'login') {
-  const name = h('input', { class: 'inp', placeholder: 'الاسم', autocomplete: 'name' });
-  const email = h('input', { class: 'inp', type: 'email', placeholder: 'البريد الإلكتروني', autocomplete: 'email', dir: 'ltr' });
-  const pw = h('input', { class: 'inp', type: 'password', placeholder: 'كلمة المرور (6 أحرف على الأقل)', autocomplete: mode === 'login' ? 'current-password' : 'new-password', dir: 'ltr' });
+  setLang(true);
+  const name = h('input', { class: 'inp', placeholder: 'Your name', autocomplete: 'name' });
+  const email = h('input', { class: 'inp', type: 'email', placeholder: 'Email', autocomplete: 'email', dir: 'ltr' });
+  const pw = h('input', { class: 'inp', type: 'password', placeholder: 'Password (at least 6 characters)', autocomplete: mode === 'login' ? 'current-password' : 'new-password', dir: 'ltr' });
   const consent = h('input', { type: 'checkbox' });
   const err = h('div', { class: 'err', role: 'alert' });
-  const btn = h('button', { class: 'btn primary block', type: 'submit' }, mode === 'login' ? 'دخول' : 'إنشاء الحساب');
+  const label = mode === 'login' ? 'Sign in' : 'Create account';
+  const btn = h('button', { class: 'btn primary block', type: 'submit' }, label);
   const form = h('form', {
     class: 'authform', onsubmit: async e => {
       e.preventDefault(); err.textContent = '';
       if (mode === 'signup') {
-        if (!name.value.trim()) return err.textContent = 'اكتبي الاسم';
-        if (!consent.checked && !isTeacherEmail(email.value)) return err.textContent = 'يلزم الموافقة على التتبّع لإكمال التسجيل';
+        if (!name.value.trim()) return err.textContent = 'Please write your name';
+        if (!consent.checked && !isTeacherEmail(email.value)) return err.textContent = 'Please accept to continue';
       }
       btn.disabled = true; btn.textContent = '…';
       try {
         if (mode === 'login') await store.signIn(email.value, pw.value);
         else await store.signUp(name.value.trim(), email.value, pw.value);
-      } catch (x) { err.textContent = errMsg(x); btn.disabled = false; btn.textContent = mode === 'login' ? 'دخول' : 'إنشاء الحساب'; }
+      } catch (x) { err.textContent = errMsg(x); btn.disabled = false; btn.textContent = label; }
     }
   },
     mode === 'signup' ? name : null, email, pw,
-    mode === 'signup' ? h('label', { class: 'check consent' }, consent, ' أعلم أن التطبيق يسجّل أوقات القراءة والعدّات ليطّلع عليها المعلّم، وأوافق على ذلك.') : null,
+    mode === 'signup' ? h('label', { class: 'check consent' }, consent, ' I understand that my reading time and counts are shown live to my teacher.') : null,
     err, btn,
-    mode === 'login' ? h('button', { type: 'button', class: 'link', onclick: async () => { if (!email.value) return err.textContent = 'اكتبي بريدك أولًا'; try { await store.resetPassword(email.value); toast('أُرسل رابط إعادة التعيين إلى بريدك'); } catch (x) { err.textContent = errMsg(x); } } }, 'نسيت كلمة المرور؟') : null);
+    mode === 'login' ? h('button', { type: 'button', class: 'link', onclick: async () => { if (!email.value) return err.textContent = 'Write your email first'; try { await store.resetPassword(email.value); toast('A reset link was sent to your email'); } catch (x) { err.textContent = errMsg(x); } } }, 'Forgot password?') : null);
   app.mount(h('div', { class: 'auth' },
-    h('div', { class: 'auth-hero' }, h('div', { class: 'logo big' }, 'م'), h('h1', {}, 'مُراجِع'), h('p', {}, 'مراجعة الحفظ ومتابعته يومًا بيوم')),
+    h('div', { class: 'auth-hero' }, h('div', { class: 'logo big' }, 'م'), h('h1', {}, 'Moraje'), h('p', {}, 'Quran review, day by day')),
     h('div', { class: 'seg' },
-      h('button', { class: mode === 'login' ? 'on' : '', onclick: () => authScreen('login') }, 'دخول'),
-      h('button', { class: mode === 'signup' ? 'on' : '', onclick: () => authScreen('signup') }, 'حساب جديد')),
+      h('button', { class: mode === 'login' ? 'on' : '', onclick: () => authScreen('login') }, 'Sign in'),
+      h('button', { class: mode === 'signup' ? 'on' : '', onclick: () => authScreen('signup') }, 'New account')),
     form));
 }
 
 function verifyScreen(u) {
+  setLang(false);
   app.mount(h('div', { class: 'auth' },
     h('div', { class: 'auth-hero' }, h('div', { class: 'logo big' }, 'م'), h('h1', {}, 'تأكيد بريد المعلم')),
     h('div', { class: 'card' },
@@ -88,12 +93,14 @@ function start(u) {
   if (isTeacherEmail(u.email)) {
     if (!u.emailVerified) return verifyScreen(u);
     app.role = 'teacher';
+    setLang(false);
     // make sure the ID token carries email_verified=true before querying
     store.refreshUser().catch(() => { }).finally(() => app.role === 'teacher' && watchTeacher());
     app.render();
     return;
   } else {
     app.role = 'student';
+    setLang(true);
     store.ensureProfile(u).catch(onErr);
     app.tracker = new Tracker(store, u.uid);
     watchStudent(u.uid);
@@ -106,6 +113,7 @@ function watchTeacher() {
     app.subs.push(store.watchStudents(list => {
       app.permError = false;
       app.students = list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+      app.recompute?.();
       if (!app.sel || !list.some(s => s.id === app.sel)) {
         let saved = null; try { saved = localStorage.getItem('sel'); } catch { }
         app.selectStudent(list.some(s => s.id === saved) ? saved : list[0]?.id || null, true);
@@ -124,7 +132,8 @@ function watchStudent(uid) {
   app.day = today;
   const rer = () => app.render();
   const recompute = () => {
-    const d = breakdown(app.weekEvents, app.assignments)[todayStr()] || { counts: {}, time: {}, done: {} };
+    const ra = app.role === 'teacher' ? (app.students.find(s => s.id === uid)?.resetAt || 0) : (app.resetAll || 0);
+    const d = breakdown(app.weekEvents, app.assignments, ra)[todayStr()] || { counts: {}, time: {}, done: {} };
     app.counts = d.counts; app.timeToday = d.time; app.doneToday = d.done || {};
   };
   studentSubs.push(store.watchAssignments(uid, l => { app.assignments = l; recompute(); rer(); }, onErr));
@@ -136,6 +145,8 @@ function watchStudent(uid) {
     rer();
   }, onErr));
   if (app.role === 'teacher') studentSubs.push(store.watchTests(uid, l => { app.tests = l; rer(); }, onErr));
+  else studentSubs.push(store.watchProfile(uid, p => { app.resetAll = p?.resetAt || 0; recompute(); rer(); }, onErr));
+  app.recompute = recompute;
 }
 app.selectStudent = (id, silent) => {
   app.sel = id;
@@ -148,8 +159,8 @@ app.selectStudent = (id, silent) => {
 setInterval(() => { if (app.day && app.day !== todayStr() && !app.reader) { watchStudent(app.role === 'teacher' ? app.sel : app.user?.uid); } }, 60000);
 
 async function boot() {
-  app.mount(h('div', { class: 'splash' }, h('div', { class: 'logo big' }, 'م'), h('p', {}, 'جارٍ التحميل…')));
-  try { await loadMushaf(); } catch (e) { app.mount(h('div', { class: 'splash' }, h('p', {}, 'تعذّر تحميل بيانات المصحف. تحقّقي من الإنترنت ثم أعيدي الفتح.'))); return; }
+  app.mount(h('div', { class: 'splash' }, h('div', { class: 'logo big' }, 'م'), h('p', {}, 'Loading…')));
+  try { await loadMushaf(); } catch (e) { app.mount(h('div', { class: 'splash' }, h('p', {}, 'Could not load the Mushaf. Check your internet and open again.'))); return; }
   store.onAuth(u => { if (u) start(u); else { app.unsub(); app.role = null; authScreen('login'); } });
 }
 boot();

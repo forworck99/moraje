@@ -41,8 +41,14 @@ export function modal({ title, body, actions = [], dismissable = true }) {
 export const confirmBox = (title, text, yes = 'نعم', no = 'إلغاء', kind = 'primary') =>
   modal({ title, body: text, actions: [{ label: no, value: false, kind: 'ghost' }, { label: yes, value: true, kind }] });
 
-export function fmtDur(sec) {
+export function fmtDur(sec, en) {
   sec = Math.round(sec || 0);
+  if (en) {
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60), s = sec % 60;
+    if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+    return `${Math.floor(m / 60)}h ${m % 60}m`;
+  }
   if (sec < 60) return `${sec} ث`;
   const m = Math.floor(sec / 60), s = sec % 60;
   if (m < 60) return s ? `${m} د ${s} ث` : `${m} د`;
@@ -50,13 +56,14 @@ export function fmtDur(sec) {
   return mm ? `${hh} س ${mm} د` : `${hh} س`;
 }
 
-export function fmtTime(ms) {
+export function fmtTime(ms, en) {
   if (!ms) return '—';
-  return new Date(ms).toLocaleTimeString('ar', { hour: 'numeric', minute: '2-digit', numberingSystem: 'latn' });
+  return new Date(ms).toLocaleTimeString(en ? 'en-US' : 'ar', { hour: 'numeric', minute: '2-digit', numberingSystem: 'latn' });
 }
 
 const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-export function dayName(dayStr) { const [y, m, d] = dayStr.split('-').map(Number); return DAYS[new Date(y, m - 1, d).getDay()]; }
+const DAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export function dayName(dayStr, en) { const [y, m, d] = dayStr.split('-').map(Number); return (en ? DAYS_EN : DAYS)[new Date(y, m - 1, d).getDay()]; }
 export function addDays(dayStr, n) {
   const [y, m, d] = dayStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d + n);

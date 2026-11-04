@@ -1,5 +1,5 @@
 // Mushaf page rendering with exact Madinah line layout (QCF4 glyph fonts)
-import { mushaf, FONT_CDN, juzOf, pageSurahNames, surahName, arNum } from './data.js';
+import { mushaf, FONT_CDN, juzOf, pageSurahNames, surahName, surahNameEn, arNum } from './data.js';
 import { h } from './ui.js';
 
 let fallback = false;
@@ -37,9 +37,9 @@ export function fontsForPages(pages) {
   return [...set];
 }
 
-export function renderPage(p) {
+export function renderPage(p, en) {
   const pg = mushaf().pages[p];
-  const names = pageSurahNames(p).map(surahName).filter(Boolean).join(' · ');
+  const names = pageSurahNames(p).map(en ? surahNameEn : surahName).filter(Boolean).join(' · ');
   const body = h('div', { class: 'page-body', style: { fontFamily: `'${pg.font}'` } });
   for (const line of pg.lines) {
     const t = line[0][1];
@@ -75,9 +75,9 @@ export function renderPage(p) {
     body.append(ln);
   }
   return h('div', { class: 'page', 'data-page': p },
-    h('div', { class: 'page-head' }, h('span', {}, `الجزء ${arNum(juzOf(p))}`), h('span', {}, names)),
+    h('div', { class: 'page-head' }, h('span', {}, en ? `Juz ${juzOf(p)}` : `الجزء ${arNum(juzOf(p))}`), h('span', {}, names)),
     body,
-    h('div', { class: 'page-foot' }, arNum(p))
+    h('div', { class: 'page-foot' }, en ? String(p) : arNum(p))
   );
 }
 

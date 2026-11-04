@@ -3,8 +3,8 @@ import { surahName } from './data.js';
 
 const f6 = vk => { const [s, a] = vk.split(':'); return s.padStart(3, '0') + a.padStart(3, '0'); };
 export const RECITERS = {
-  alafasy: { name: 'العفاسي', urls: [vk => `https://everyayah.com/data/Alafasy_128kbps/${f6(vk)}.mp3`, vk => `https://verses.quran.com/Alafasy/mp3/${f6(vk)}.mp3`] },
-  husary: { name: 'الحصري', urls: [vk => `https://everyayah.com/data/Husary_128kbps/${f6(vk)}.mp3`, vk => `https://verses.quran.com/Husary/mp3/${f6(vk)}.mp3`] }
+  alafasy: { name: 'العفاسي', en: 'Alafasy', urls: [vk => `https://everyayah.com/data/Alafasy_128kbps/${f6(vk)}.mp3`, vk => `https://verses.quran.com/Alafasy/mp3/${f6(vk)}.mp3`] },
+  husary: { name: 'الحصري', en: 'Husary', urls: [vk => `https://everyayah.com/data/Husary_128kbps/${f6(vk)}.mp3`, vk => `https://verses.quran.com/Husary/mp3/${f6(vk)}.mp3`] }
 };
 
 export class Player {

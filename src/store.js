@@ -75,6 +75,8 @@ function firebaseStore() {
         });
       }
     },
+    watchProfile(uid, cb, err) { return onSnapshot(doc(db, 'users', uid), s => cb(s.exists() ? { id: s.id, ...s.data() } : null), err); },
+    async saveProfile(uid, data) { await setDoc(doc(db, 'users', uid), data, { merge: true }); },
     watchStudents(cb, err) {
       return onSnapshot(query(collection(db, 'users'), where('role', '==', 'student')),
         s => cb(s.docs.map(norm)), err);
@@ -147,6 +149,8 @@ function mockStore(role) {
     async resetPassword() { }, async signOut() { localStorage.removeItem(KEY); location.search = ''; },
     async getProfile(u) { return st.users[u] ? { id: u, ...st.users[u] } : null; },
     async ensureProfile() { },
+    watchProfile(u, cb) { return sub(() => cb(st.users[u] ? { id: u, ...st.users[u] } : null)); },
+    async saveProfile(u, d) { st.users[u] = { ...(st.users[u] || {}), ...d }; save(); },
     watchStudents(cb) { return sub(() => cb(list('users', x => x.role === 'student'))); },
     watchAssignments(s, cb) { return sub(() => cb(list('assignments', x => x.studentUid === s))); },
     async saveAssignment(a) { const { id: i, ...d } = a; st.assignments[i || id()] = { ...(st.assignments[i] || {}), ...d }; save(); },

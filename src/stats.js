@@ -24,12 +24,13 @@ export function timeFor(evs) {
 }
 
 // Full breakdown: day -> { counts:{aid:n}, time:{aid:sec}, total:sec, pages:{p:sec}, log:[...], first, last }
-export function breakdown(evs, assignments) {
+export function breakdown(evs, assignments, resetAll = 0) {
   const days = {};
   const lastCount = {};
   const R = resetMap(assignments);
   for (const e of sortEvents(evs)) {
-    if (before(e, R)) continue;              // teacher reset this assignment's counter
+    if (resetAll && (e.ts || e.clientTs || 0) < resetAll) continue;   // teacher reset everything for this student
+    if (before(e, R)) continue;              // teacher reset this assignment (counts, time, opens)
     const d = days[e.day] ||= { counts: {}, time: {}, listen: 0, total: 0, pages: {}, log: [], first: null, last: null, sessions: 0, flags: 0, done: {} };
     const t = e.ts || e.clientTs;
     d.first = d.first ? Math.min(d.first, t) : t;
@@ -80,6 +81,10 @@ export function breakdown(evs, assignments) {
       d.log.push({ kind: 'close', t, sec: e.sec });
     } else if (e.type === 'assignment_open') {
       d.log.push({ kind: 'aopen', t, aid: e.assignmentId });
+    } else if (e.type === 'pause') {
+      d.log.push({ kind: 'pause', t, aid: e.assignmentId, page: e.page, vk: e.vk });
+    } else if (e.type === 'resume') {
+      d.log.push({ kind: 'resume', t, aid: e.assignmentId, page: e.page });
     }
   }
   return days;

@@ -27,7 +27,7 @@ export function teacherHome(app) {
   }
 
   const stu = app.students.find(s => s.id === app.sel) || app.students[0];
-  const days = breakdown(app.weekEvents || [], app.assignments);
+  const days = breakdown(app.weekEvents || [], app.assignments, stu.resetAt || 0);
   const tabs = [['grid', 'المتابعة'], ['log', 'السجل'], ['assign', 'الواجبات'], ['tests', 'الاختبارات']];
 
   const body = { grid: gridTab, log: logTab, assign: assignTab, tests: testsTab }[T.tab](app, stu, days, today);
@@ -121,6 +121,8 @@ function logTab(app, stu, days, today) {
           e.again ? ' · سبق تسجيلها اليوم' : '',
           e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ أسرع من المعقول (أقل من ${fmtDur(e.minSec)})`) : '')));
     if (e.kind === 'pundo') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ ألغت تسجيل صفحة ${e.page}`), ` · ${aName(e.aid)}`));
+    if (e.kind === 'pause') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `⏸ أوقفت الدرس عند صفحة ${e.page}${e.vk ? ` (آية ${e.vk.split(':')[1]})` : ''} · ${aName(e.aid)}`));
+    if (e.kind === 'resume') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `▶ استأنفت الدرس من صفحة ${e.page} · ${aName(e.aid)}`));
     if (e.kind === 'adjust') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ تعديل العدد من ${e.from} إلى ${e.to}`), ` · ${aName(e.aid)}`));
     if (e.kind === 'open') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, '🔓 فتحت التطبيق'));
     if (e.kind === 'close') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `🔒 أغلقت التطبيق${e.sec ? ` (جلسة نشطة ${fmtDur(e.sec)})` : ''}`));
@@ -139,7 +141,8 @@ function assignTab(app, stu, days, today) {
   const list = app.assignments.slice().sort((a, b) => (b.start || '').localeCompare(a.start || '') || TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type));
   return h('section', {},
     h('button', { class: 'btn primary block', onclick: () => editAssignment(app, stu) }, '+ واجب جديد'),
-    list.length ? h('button', { class: 'btn ghost block', onclick: () => resetCounters(app, list) }, '⟲ تصفير كل العدادات') : null,
+    h('button', { class: 'btn ghost block', onclick: () => resetAll(app, stu) }, '⟲ تصفير كل شيء لهذه الطالبة'),
+    stu.resetAt ? h('p', { class: 'muted center' }, `آخر تصفير كامل: ${shortDate(todayStr(new Date(stu.resetAt)))} ${fmtTime(stu.resetAt)}`) : null,
     h('div', { class: 'alist' }, list.map(a => {
       const T = TYPES[a.type];
       const cur = a.active !== false && (!a.start || a.start <= today) && (!a.end || a.end >= today);
@@ -157,13 +160,21 @@ function assignTab(app, stu, days, today) {
         h('li', {}, 'الحفظ الجديد: نصف صفحة، 15 مرة يوميًا طوال الأسبوع.'),
         h('li', {}, 'الحفظ القديم: صفحة، 15 مرة يوميًا.'),
         h('li', {}, 'الحفظ الحديث والمراجعة: تسحب الطالبة بعد إكمال كل صفحة، فتعرف كم صفحة قرأت من النطاق.'),
-        h('li', {}, 'زر «تصفير» يبدأ العدّ من الصفر، ويبقى السجل القديم محفوظًا دون أن يُحسب.'))));
+        h('li', {}, '«تصفير» بجانب الواجب: يصفّر عدّاده ووقته وسجله. «تصفير كل شيء»: يصفّر كل النتائج، ومنها أوقات الدخول والخروج.'))));
+}
+
+async function resetAll(app, stu) {
+  const ok = await confirmBox('تصفير كل شيء', `تصفير كل نتائج «${stu.name || ''}»؟ العدّات والأوقات والدخول والخروج وكل السجل قبل الآن لن تظهر بعد التصفير.`, 'تصفير', 'إلغاء', 'danger');
+  if (!ok) return;
+  if (!await confirmBox('تأكيد نهائي', 'هل أنت متأكد؟', 'نعم، صفّر', 'تراجع', 'danger')) return;
+  await app.store.saveProfile(stu.id, { resetAt: Date.now() });
+  toast('صُفِّر كل شيء ✓');
 }
 
 async function resetCounters(app, list) {
   const one = list.length === 1;
   const ok = await confirmBox('تصفير العداد', one
-    ? `تصفير عدّاد «${rangeLabel(list[0].from, list[0].to)}»؟ لن تُحسب القراءات والأوقات السابقة لهذا الواجب.`
+    ? `تصفير «${rangeLabel(list[0].from, list[0].to)}»؟ العدّات والأوقات وسجل هذا الواجب قبل الآن لن تظهر.`
     : 'تصفير عدّادات كل الواجبات؟ لن تُحسب القراءات والأوقات السابقة.', 'تصفير', 'إلغاء', 'danger');
   if (!ok) return;
   const now = Date.now();

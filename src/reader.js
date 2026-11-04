@@ -1,12 +1,19 @@
 // Mushaf reader: pages, audio bar, repetition, count slider, word marks
-import { h, toast, modal, confirmBox } from './ui.js';
+import { h, toast, modal, confirmBox, fmtTime } from './ui.js';
 import {
   PAGE_LIST, versePage, pageVerses, rangeVerses, inRange, rangeLabel, surahName, surahVerses,
-  SURAH_ORDER, allVerses, rangeWordCount, arNum, rangePages, pageRangeWordCount
+  SURAH_ORDER, allVerses, rangeWordCount, arNum, rangePages, pageRangeWordCount, surahNameEn, rangeLabelEn
 } from './data.js';
 import { renderPage, layoutPage, decorate, ensureFonts, fontsForPages } from './mushaf.js';
 import { RECITERS } from './audio.js';
-import { TYPES, isPageMode, targetOf, unitOf } from './types.js';
+import { TYPES, isPageMode, targetOf, unitOf, unitEn } from './types.js';
+import { todayStr } from './store.js';
+
+// where the student stopped in an assignment (kept on this device)
+const POSKEY = id => `pos:${id}`;
+export function savedPos(id) { try { return JSON.parse(localStorage.getItem(POSKEY(id))); } catch { return null; } }
+function savePos(id, v) { try { localStorage.setItem(POSKEY(id), JSON.stringify(v)); } catch { } }
+export function clearPos(id) { try { localStorage.removeItem(POSKEY(id)); } catch { } }
 
 const MARK_COLORS = [
   { c: '#d32f2f', n: 'أحمر' }, { c: '#ef6c00', n: 'برتقالي' }, { c: '#1565c0', n: 'أزرق' }, { c: '#2e7d32', n: 'أخضر' }
@@ -16,6 +23,11 @@ export function openReader(ctx) {
   // ctx: { role, app, assignment?, startPage?, onBack }
   const { app, role } = ctx;
   const A = ctx.assignment || null;
+  const EN = role === 'student';
+  const L = (ar, en) => EN ? en : ar;
+  const sName = s => EN ? surahNameEn(s) : surahName(s);
+  const rLabel = (a, b) => EN ? rangeLabelEn(a, b) : rangeLabel(a, b);
+  const nm = n => EN ? String(n) : arNum(n);
   const player = app.player;
   const wideMQ = matchMedia('(min-width: 860px) and (orientation: landscape)');
   let wide = wideMQ.matches;
@@ -45,21 +57,22 @@ export function openReader(ctx) {
   const viewOf = p => views.findIndex(v => v.includes(p));
 
   /* ---------- DOM ---------- */
-  const title = A ? `${TYPES[A.type]?.label || 'واجب'} · ${rangeLabel(A.from, A.to)}` : 'المصحف';
-  const pageSel = h('select', { class: 'pagesel', 'aria-label': 'اختيار الصفحة', onchange: e => go(viewOf(+e.target.value)) },
-    SURAH_ORDER.map(s => h('optgroup', { label: surahName(s) },
-      PAGE_LIST.filter(p => pageVerses(p).some(v => v.startsWith(s + ':'))).map(p => h('option', { value: p }, `صفحة ${p}`)))));
+  const title = A ? `${L(TYPES[A.type]?.label, TYPES[A.type]?.en) || ''} · ${rLabel(A.from, A.to)}` : L('المصحف', 'Mushaf');
+  const pageSel = h('select', { class: 'pagesel', 'aria-label': L('اختيار الصفحة', 'Choose page'), onchange: e => go(viewOf(+e.target.value)) },
+    SURAH_ORDER.map(s => h('optgroup', { label: sName(s) },
+      PAGE_LIST.filter(p => pageVerses(p).some(v => v.startsWith(s + ':'))).map(p => h('option', { value: p }, L(`صفحة ${p}`, `Page ${p}`))))));
   const spread = h('div', { class: 'spread' });
   const stage = h('div', { class: 'stage' }, spread,
-    h('button', { class: 'navbtn prev', 'aria-label': 'الصفحة السابقة', onclick: () => go(vi - 1) }, '›'),
-    h('button', { class: 'navbtn next', 'aria-label': 'الصفحة التالية', onclick: () => go(vi + 1) }, '‹'));
+    h('button', { class: 'navbtn prev', 'aria-label': L('الصفحة السابقة', 'Previous page'), onclick: () => go(vi - 1) }, '›'),
+    h('button', { class: 'navbtn next', 'aria-label': L('الصفحة التالية', 'Next page'), onclick: () => go(vi + 1) }, '‹'));
 
   const counterEl = (A && role === 'student') ? buildCounter() : null;
   const playerEl = buildPlayer();
   const root = h('div', { class: 'reader' + (A ? ' has-a' : '') },
     h('header', { class: 'rbar' },
-      h('button', { class: 'icon-btn', 'aria-label': 'رجوع', onclick: () => close() }, '→'),
+      h('button', { class: 'icon-btn', 'aria-label': L('رجوع', 'Back'), onclick: () => close() }, EN ? '←' : '→'),
       h('div', { class: 'rtitle' }, h('b', {}, title), role === 'teacher' ? h('small', {}, 'وضع المعلم: اضغط على أي كلمة لتلوينها') : null),
+      (A && EN) ? h('button', { class: 'btn ghost sm pausebtn', onclick: () => pauseLesson() }, '⏸ Pause') : null,
       pageSel),
     stage, counterEl, playerEl);
   if (A) root.style.setProperty('--rg', TYPES[A.type]?.tint || 'rgba(46,125,50,.14)');
@@ -84,7 +97,7 @@ export function openReader(ctx) {
     vi = i;
     const pages = views[vi];
     await ensureFonts(fontsForPages(pages));
-    spread.replaceChildren(...pages.map(renderPage));
+    spread.replaceChildren(...pages.map(p => renderPage(p, EN)));
     spread.classList.toggle('two', pages.length === 2);
     fit();
     paint();
@@ -146,10 +159,10 @@ export function openReader(ctx) {
     };
     const repeatThis = () => { scope = 'custom'; custom = { from: vk, to: vk }; syncScopeUI(); setQueue(vk); player.setRepeat(1, Math.max(3, player.rangeRep || 3)); repInputs(); player.play(); };
     const body = h('div', { class: 'wmenu' },
-      h('div', { class: 'wm-ref' }, `${surahName(+su)} · الآية ${arNum(ay)}`),
+      h('div', { class: 'wm-ref' }, L(`${surahName(+su)} · الآية ${arNum(ay)}`, `${surahNameEn(+su)} · Ayah ${ay}`)),
       m && m.note ? h('div', { class: 'wm-note', style: { borderColor: m.color } }, '📝 ', m.note) : null,
-      m && !m.note && role === 'student' ? h('div', { class: 'wm-note', style: { borderColor: m.color } }, 'انتبهي لقراءة هذه الكلمة') : null);
-    const actions = [{ label: '▶ استماع من هنا', value: 'listen', kind: 'primary' }, { label: '🔁 تكرار الآية', value: 'rep', kind: 'ghost' }];
+      m && !m.note && role === 'student' ? h('div', { class: 'wm-note', style: { borderColor: m.color } }, 'Your teacher marked this word: read it carefully.') : null);
+    const actions = [{ label: L('▶ استماع من هنا', '▶ Listen from here'), value: 'listen', kind: 'primary' }, { label: L('🔁 تكرار الآية', '🔁 Repeat ayah'), value: 'rep', kind: 'ghost' }];
     if (role === 'teacher') {
       let color = m?.color || MARK_COLORS[0].c;
       const note = h('input', { class: 'inp', placeholder: 'ملاحظة للطالبة (اختياري)', value: m?.note || '' });
@@ -172,38 +185,38 @@ export function openReader(ctx) {
       });
       return;
     }
-    modal({ title: 'الآية', body, actions }).then(v => { if (v === 'listen') listen(); else if (v === 'rep') repeatThis(); });
+    modal({ title: 'Ayah', body, actions: [{ label: 'Close', value: 0, kind: 'ghost' }, ...actions] }).then(v => { if (v === 'listen') listen(); else if (v === 'rep') repeatThis(); });
   }
 
   /* ---------- audio bar ---------- */
   function buildPlayer() {
     recBtn = h('button', { class: 'rec', onclick: () => { player.setReciter(player.reciter === 'alafasy' ? 'husary' : 'alafasy'); } }, '');
-    playBtn = h('button', { class: 'play', 'aria-label': 'تشغيل', onclick: () => { if (!player.queue.length) setQueue(); follow = true; player.toggle(); } }, '▶');
+    playBtn = h('button', { class: 'play', 'aria-label': L('تشغيل', 'Play'), onclick: () => { if (!player.queue.length) setQueue(); follow = true; player.toggle(); } }, '▶');
     const jb = (d, lbl, aria) => h('button', { class: 'jump', 'aria-label': aria, onclick: () => { follow = true; player.jump(d); } }, lbl);
     statusEl = h('div', { class: 'pstatus' });
     scopeSel = h('select', { class: 'inp sm', onchange: () => { scope = scopeSel.value; syncScopeUI(); setQueue(); } },
-      A ? h('option', { value: 'assignment' }, 'نطاق الواجب') : null,
-      h('option', { value: 'page' }, 'الصفحة الحالية'),
-      h('option', { value: 'surah' }, 'السورة كاملة'),
-      h('option', { value: 'custom' }, 'من … إلى …'));
-    const surSel = (onch) => h('select', { class: 'inp sm', onchange: onch }, SURAH_ORDER.map(s => h('option', { value: s }, surahName(s))));
+      A ? h('option', { value: 'assignment' }, L('نطاق الواجب', 'Assignment range')) : null,
+      h('option', { value: 'page' }, L('الصفحة الحالية', 'Current page')),
+      h('option', { value: 'surah' }, L('السورة كاملة', 'Whole surah')),
+      h('option', { value: 'custom' }, L('من … إلى …', 'From … to …')));
+    const surSel = (onch) => h('select', { class: 'inp sm', onchange: onch }, SURAH_ORDER.map(s => h('option', { value: s }, sName(s))));
     const ayNum = (onch) => h('input', { class: 'inp sm num', type: 'number', min: 1, inputmode: 'numeric', onchange: onch });
     const upd = () => { custom = { from: `${fromS.value}:${clampA(fromS.value, fromA.value)}`, to: `${toS.value}:${clampA(toS.value, toA.value)}` }; setQueue(); };
     fromS = surSel(upd); fromA = ayNum(upd); toS = surSel(upd); toA = ayNum(upd);
-    customRow = h('div', { class: 'prow custom' }, h('span', {}, 'من'), fromS, fromA, h('span', {}, 'إلى'), toS, toA);
+    customRow = h('div', { class: 'prow custom' }, h('span', {}, L('من', 'From')), fromS, fromA, h('span', {}, L('إلى', 'to')), toS, toA);
     ayahRepI = h('input', { class: 'inp sm num', type: 'number', min: 1, max: 99, value: A?.ayahRepeat || 1, inputmode: 'numeric', onchange: () => player.setRepeat(+ayahRepI.value || 1, null) });
     rangeRepI = h('input', { class: 'inp sm num', type: 'number', min: 0, max: 999, value: A?.rangeRepeat ?? 1, inputmode: 'numeric', onchange: () => player.setRepeat(null, +rangeRepI.value || 0) });
     const settings = h('div', { class: 'psettings' },
-      h('div', { class: 'prow' }, h('label', {}, 'التشغيل:'), scopeSel),
+      h('div', { class: 'prow' }, h('label', {}, L('التشغيل:', 'Play:')), scopeSel),
       customRow,
-      h('div', { class: 'prow' }, h('label', {}, 'تكرار كل آية'), ayahRepI, h('label', {}, 'تكرار النطاق'), rangeRepI, h('small', { class: 'muted' }, '(0 = بلا توقف)')));
-    const gear = h('button', { class: 'icon-btn gear', 'aria-label': 'إعدادات التكرار', onclick: () => settings.classList.toggle('open') }, '⚙');
+      h('div', { class: 'prow' }, h('label', {}, L('تكرار كل آية', 'Repeat each ayah')), ayahRepI, h('label', {}, L('تكرار النطاق', 'Repeat range')), rangeRepI, h('small', { class: 'muted' }, L('(0 = بلا توقف)', '(0 = nonstop)'))));
+    const gear = h('button', { class: 'icon-btn gear', 'aria-label': L('إعدادات التكرار', 'Repeat settings'), onclick: () => settings.classList.toggle('open') }, '⚙');
     return h('div', { class: 'player' },
       settings,
       h('div', { class: 'pmain' },
         recBtn,
         h('div', { class: 'pctrl' },
-          jb(-2, '«٢', 'الرجوع آيتين'), jb(-1, '‹١', 'الرجوع آية'), playBtn, jb(1, '١›', 'تقديم آية'), jb(2, '٢»', 'تقديم آيتين')),
+          jb(-2, L('«٢', '«2'), L('الرجوع آيتين', 'Back 2 ayahs')), jb(-1, L('‹١', '‹1'), L('الرجوع آية', 'Back 1 ayah')), playBtn, jb(1, L('١›', '1›'), L('تقديم آية', 'Forward 1 ayah')), jb(2, L('٢»', '2»'), L('تقديم آيتين', 'Forward 2 ayahs'))),
         gear),
       statusEl);
   }
@@ -232,17 +245,17 @@ export function openReader(ctx) {
     player.setQueue(q, keep);
   }
   function updPlayer() {
-    recBtn.textContent = `🎙 ${RECITERS[player.reciter].name}`;
+    recBtn.textContent = `🎙 ${L(RECITERS[player.reciter].name, RECITERS[player.reciter].en)}`;
     playBtn.textContent = player.playing ? '❚❚' : '▶';
-    playBtn.setAttribute('aria-label', player.playing ? 'إيقاف مؤقت' : 'تشغيل');
+    playBtn.setAttribute('aria-label', player.playing ? L('إيقاف مؤقت', 'Pause') : L('تشغيل', 'Play'));
     const vk = player.current;
     if (vk) {
       const [s, a] = vk.split(':');
-      const rep = player.ayahRep > 1 ? ` · تكرار ${player.ayahDone + 1}/${player.ayahRep}` : '';
-      const rr = player.rangeRep !== 1 ? ` · دورة ${player.rangeDone + 1}${player.rangeRep ? '/' + player.rangeRep : ''}` : '';
-      statusEl.textContent = `${player.bism ? 'البسملة · ' : ''}${surahName(+s)} ${arNum(a)}${rep}${rr}${player.loading && player.playing ? ' · جارٍ التحميل…' : ''}`;
-    } else statusEl.textContent = 'اضغطي ▶ أو اختاري آية';
-    if (player.error && player.error !== lastErr) { lastErr = player.error; toast('تعذّر تحميل التلاوة، تحقّقي من الإنترنت'); }
+      const rep = player.ayahRep > 1 ? ` · ${L('تكرار', 'repeat')} ${player.ayahDone + 1}/${player.ayahRep}` : '';
+      const rr = player.rangeRep !== 1 ? ` · ${L('دورة', 'round')} ${player.rangeDone + 1}${player.rangeRep ? '/' + player.rangeRep : ''}` : '';
+      statusEl.textContent = `${player.bism ? L('البسملة · ', 'Basmala · ') : ''}${sName(+s)} ${nm(a)}${rep}${rr}${player.loading && player.playing ? L(' · جارٍ التحميل…', ' · loading…') : ''}`;
+    } else statusEl.textContent = L('اضغطي ▶ أو اختاري آية', 'Press ▶ or tap an ayah');
+    if (player.error && player.error !== lastErr) { lastErr = player.error; toast(L('تعذّر تحميل التلاوة، تحقّقي من الإنترنت', 'Could not load the recitation. Check your internet.')); }
     app.tracker?.setAudio(player.playing);
     // follow the recitation across pages
     if (vk && follow && (player.playing)) {
@@ -258,9 +271,9 @@ export function openReader(ctx) {
     cntNum = h('b', {}, '0');
     cntBar = h('div', { class: 'bar' }, h('i'));
     cntTime = h('small', {});
-    cntLabel = h('span', { class: 'track-label' }, 'اسحبي لتسجيل قراءة  ←');
+    cntLabel = h('span', { class: 'track-label' }, 'Swipe to log a reading  ←');
     const thumb = h('div', { class: 'thumb', 'aria-hidden': 'true' }, '✓');
-    const track = cntTrack = h('div', { class: 'track', role: 'slider', 'aria-label': PM ? 'اسحبي بعد إكمال الصفحة' : 'اسحبي لتسجيل قراءة', tabindex: 0 }, cntLabel, thumb);
+    const track = cntTrack = h('div', { class: 'track', role: 'slider', 'aria-label': PM ? 'Swipe after finishing the page' : 'Swipe to log a reading', tabindex: 0 }, cntLabel, thumb);
     let startX = null, max = 0, dx = 0;
     const setX = x => { thumb.style.transform = `translateX(${-x}px)`; track.style.setProperty('--p', (x / max) || 0); };
     thumb.addEventListener('pointerdown', e => { if (track.classList.contains('off')) return; startX = e.clientX; max = track.clientWidth - thumb.offsetWidth - 6; thumb.setPointerCapture(e.pointerId); track.classList.add('drag'); });
@@ -274,10 +287,10 @@ export function openReader(ctx) {
     };
     thumb.addEventListener('pointerup', end); thumb.addEventListener('pointercancel', end);
     track.addEventListener('keydown', e => { if (e.key === 'Enter' && !track.classList.contains('off')) doCount(); });
-    const adj = h('button', { class: 'adj', 'aria-label': PM ? 'إلغاء تسجيل صفحة' : 'تعديل العدد', onclick: adjust }, '±');
+    const adj = h('button', { class: 'adj', 'aria-label': PM ? 'Undo a page' : 'Correct the count', onclick: adjust }, '±');
     cntPages = PM ? h('div', { class: 'pdots' }) : null;
     return h('div', { class: 'counter' + (PM ? ' pm' : '') },
-      h('div', { class: 'cinfo' }, h('div', {}, cntNum, ` / ${targetOf(A)}`, h('small', {}, PM ? ' صفحة' : ' اليوم')), cntBar, cntTime),
+      h('div', { class: 'cinfo' }, h('div', {}, cntNum, ` / ${targetOf(A)}`, h('small', {}, PM ? ' pages' : ' today')), cntBar, cntTime),
       track, adj, cntPages);
   }
   const curCount = () => app.counts[A.id] || 0;
@@ -290,46 +303,46 @@ export function openReader(ctx) {
     if (PM) {
       const p = pageToMark();
       if (p == null) return;
-      const ok = await confirmBox('تسجيل صفحة', `هل أتممتِ قراءة الصفحة ${p} كاملة؟`, 'نعم، أتممتها');
+      const ok = await confirmBox('Log page', `Did you finish reading page ${p} completely?`, 'Yes, finished', 'Cancel');
       if (!ok) return;
       const readSec = app.tracker.takePageSec(A.id, p);
       const minSec = Math.max(15, Math.round(pageRangeWordCount(p, A.from, A.to) * 0.45));
       await app.store.logEvent(app.user.uid, 'page_done', { assignmentId: A.id, page: p, readSec, minSec });
       const n = doneSet().size + (doneSet().has(p) ? 0 : 1), t = targetOf(A);
-      toast(n >= t ? `أحسنتِ! أتممتِ المراجعة كاملة: ${n} صفحة 🌟` : `سُجِّلت الصفحة ${p} ✓ (${n}/${t})`);
+      toast(n >= t ? `Well done! Review complete: ${n} pages 🌟` : `Page ${p} logged ✓ (${n}/${t})`);
       // move on to the next unread page of the range
       const next = rangeP.find(x => x > p && !doneSet().has(x) && x !== p);
       if (next && !views[vi].includes(next)) setTimeout(() => go(viewOf(next)), 500);
       return;
     }
     const n = curCount() + 1;
-    const ok = await confirmBox('تسجيل قراءة', `هل أتممتِ قراءة «${rangeLabel(A.from, A.to)}» كاملة؟ ستُسجَّل القراءة رقم ${n}.`, 'نعم، أتممتها');
+    const ok = await confirmBox('Log reading', `Did you finish reading ${rangeLabelEn(A.from, A.to)} completely? This will be reading #${n}.`, 'Yes, finished', 'Cancel');
     if (!ok) return;
     const readSec = app.tracker.takeReadSec(A.id);
     const minSec = Math.max(15, Math.round(rangeWordCount(A.from, A.to) * 0.45));
     await app.store.logEvent(app.user.uid, 'count', { assignmentId: A.id, readSec, minSec, n });
-    toast(n >= targetOf(A) ? `أحسنتِ! أتممتِ ${n} قراءات اليوم 🌟` : `سُجِّلت القراءة ${n} ✓`);
+    toast(n >= targetOf(A) ? `Well done! ${n} readings today 🌟` : `Reading ${n} logged ✓`);
   }
   async function adjust() {
     if (PM) {
       const ds = [...doneSet()].sort((a, b) => a - b);
-      if (!ds.length) { toast('لا توجد صفحات مسجّلة اليوم'); return; }
-      const p = await modal({ title: 'إلغاء تسجيل صفحة', body: 'اختاري الصفحة التي سُجِّلت بالخطأ:', actions: [{ label: 'إلغاء', value: 0, kind: 'ghost' }, ...ds.map(x => ({ label: `صفحة ${x}`, value: x, kind: 'ghost' }))] });
+      if (!ds.length) { toast('No pages logged today'); return; }
+      const p = await modal({ title: 'Undo a page', body: 'Choose the page you logged by mistake:', actions: [{ label: 'Cancel', value: 0, kind: 'ghost' }, ...ds.map(x => ({ label: `Page ${x}`, value: x, kind: 'ghost' }))] });
       if (!p) return;
-      if (!await confirmBox('تأكيد', `إلغاء تسجيل الصفحة ${p}؟`, 'نعم')) return;
-      if (!await confirmBox('تأكيد نهائي', 'هل أنتِ متأكدة فعلًا؟ سيُسجَّل هذا ويظهر للمعلم.', 'نعم، متأكدة', 'تراجع', 'danger')) return;
+      if (!await confirmBox('Confirm', `Undo page ${p}?`, 'Yes', 'Cancel')) return;
+      if (!await confirmBox('Final check', 'Are you really sure? This is recorded and your teacher will see it.', 'Yes, I am sure', 'Go back', 'danger')) return;
       await app.store.logEvent(app.user.uid, 'page_undo', { assignmentId: A.id, page: p });
-      toast(`أُلغي تسجيل الصفحة ${p}`);
+      toast(`Page ${p} undone`);
       return;
     }
     const n = curCount();
-    const delta = await modal({ title: 'تعديل العدد', body: `العدد الحالي اليوم: ${n}. استخدمي هذا فقط إذا ضغطتِ بالخطأ.`, actions: [{ label: 'إلغاء', value: 0, kind: 'ghost' }, { label: '− إنقاص 1', value: -1, kind: 'ghost' }, { label: '+ زيادة 1', value: 1, kind: 'ghost' }] });
+    const delta = await modal({ title: 'Correct the count', body: `Today's count: ${n}. Use this only if you logged by mistake.`, actions: [{ label: 'Cancel', value: 0, kind: 'ghost' }, { label: '− 1', value: -1, kind: 'ghost' }, { label: '+ 1', value: 1, kind: 'ghost' }] });
     if (!delta || (delta < 0 && n === 0)) return;
     const to = Math.max(0, n + delta);
-    if (!await confirmBox('تأكيد التعديل', `تغيير العدد من ${n} إلى ${to}؟`, 'نعم')) return;
-    if (!await confirmBox('تأكيد نهائي', 'هل أنتِ متأكدة فعلًا؟ سيُسجَّل هذا التعديل ويظهر للمعلم.', 'نعم، متأكدة', 'تراجع', 'danger')) return;
+    if (!await confirmBox('Confirm', `Change the count from ${n} to ${to}?`, 'Yes', 'Cancel')) return;
+    if (!await confirmBox('Final check', 'Are you really sure? This change is recorded and your teacher will see it.', 'Yes, I am sure', 'Go back', 'danger')) return;
     await app.store.logEvent(app.user.uid, 'count_adjust', { assignmentId: A.id, delta, from: n, to });
-    toast('عُدِّل العدد');
+    toast('Count corrected');
   }
   function updCounter() {
     if (!counterEl) return;
@@ -338,22 +351,35 @@ export function openReader(ctx) {
     cntBar.firstChild.style.width = Math.min(100, n / t * 100) + '%';
     counterEl.classList.toggle('done', n >= t);
     const sec = (app.timeToday[A.id] || 0) + (app.tracker?.peekReadSec(A.id) || 0);
-    cntTime.textContent = `وقت القراءة اليوم: ${Math.floor(sec / 60)} د`;
+    cntTime.textContent = `Reading time today: ${Math.floor(sec / 60)} min`;
     if (PM) {
       const p = pageToMark();
       const vis = (views[vi] || []).filter(x => rangeP.includes(x));
       cntTrack.classList.toggle('off', p == null);
-      cntLabel.textContent = p != null ? `أكملتِ صفحة ${p}؟ اسحبي ←`
-        : vis.length ? `✓ ${vis.length > 1 ? 'الصفحتان مقروءتان' : 'الصفحة مقروءة'}` : 'هذه الصفحة خارج الواجب';
+      cntLabel.textContent = p != null ? `Page ${p} ←`
+        : vis.length ? `✓ ${vis.length > 1 ? 'Both pages read' : 'Page read'}` : 'This page is not in the assignment';
       const ds = doneSet();
-      cntPages.replaceChildren(...rangeP.map(x => h('button', { class: 'pdot' + (ds.has(x) ? ' ok' : '') + ((views[vi] || []).includes(x) ? ' cur' : ''), title: `صفحة ${x}`, onclick: () => go(viewOf(x)) }, x)));
+      cntPages.replaceChildren(...rangeP.map(x => h('button', { class: 'pdot' + (ds.has(x) ? ' ok' : '') + ((views[vi] || []).includes(x) ? ' cur' : ''), title: `Page ${x}`, onclick: () => go(viewOf(x)) }, x)));
     }
   }
   ctx.updCounter = updCounter;
   if (app.tracker) { const prev = app.tracker.onTick; app.tracker.onTick = () => { prev?.(); updCounter(); }; cleanups.push(() => { app.tracker.onTick = prev; }); }
 
+  /* ---------- pause & resume ---------- */
+  function position() { return { page: views[vi]?.[0], vk: player.current, day: todayStr(), at: Date.now() }; }
+  async function pauseLesson() {
+    const pos = position();
+    savePos(A.id, pos);
+    app.store.logEvent(app.user.uid, 'pause', { assignmentId: A.id, page: pos.page, vk: pos.vk || null });
+    paused = true;
+    close();
+    toast(`Paused. You will continue from page ${pos.page}.`, 3500);
+  }
+  let paused = false;
+
   /* ---------- start ---------- */
   function close() {
+    if (A && EN && !paused) savePos(A.id, position());
     cleanups.forEach(f => f());
     player.stop();
     app.tracker?.setContext([], null);
@@ -365,8 +391,15 @@ export function openReader(ctx) {
   views = buildViews();
   player.setRepeat(A?.ayahRepeat || 1, A?.rangeRepeat ?? 1);
   syncScopeUI();
-  const startP = ctx.startPage || (A ? versePage(A.from) : PAGE_LIST[0]);
-  go(Math.max(0, viewOf(startP))).then(() => { setQueue(); updPlayer(); updCounter(); });
-  if (A && role === 'student') app.store.logEvent(app.user.uid, 'assignment_open', { assignmentId: A.id });
+  const resume = ctx.resume || null;
+  const startP = resume?.page || ctx.startPage || (A ? versePage(A.from) : PAGE_LIST[0]);
+  go(Math.max(0, viewOf(startP))).then(() => {
+    setQueue(resume?.vk || undefined);
+    updPlayer(); updCounter();
+  });
+  if (A && role === 'student') {
+    app.store.logEvent(app.user.uid, resume ? 'resume' : 'assignment_open', { assignmentId: A.id, page: startP });
+    if (resume) toast(`Welcome back! Continuing from page ${startP}${resume.vk ? `, ayah ${resume.vk.split(':')[1]}` : ''}.`, 3500);
+  }
   return ctx;
 }

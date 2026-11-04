@@ -92,3 +92,11 @@ export function pageRangeWordCount(p, from, to) {
   for (const line of M.pages[p].lines) for (const w of line) if (w[1] === 'w' && w[2] && inRange(w[2], from, to)) n++;
   return n;
 }
+
+const SURAH_EN = { 36: 'Ya-Sin', 43: 'Az-Zukhruf', 44: 'Ad-Dukhan', 45: 'Al-Jathiyah' };
+export const surahNameEn = s => SURAH_EN[s] || `Surah ${s}`;
+export function rangeLabelEn(from, to) {
+  const [s1, a1] = from.split(':'), [s2, a2] = to.split(':');
+  if (s1 === s2) return `${surahNameEn(+s1)} ${a1}–${a2}`;
+  return `${surahNameEn(+s1)} ${a1} – ${surahNameEn(+s2)} ${a2}`;
+}

@@ -254,3 +254,16 @@ html.fallback .fb-head { font-family: 'Amiri Quran', serif; font-size: calc(var(
 .reader { grid-template-columns: minmax(0, 1fr); }
 .reader > *, .counter > * { min-width: 0; }
 .counter.pm { grid-template-columns: auto minmax(0, 1fr) auto; }
+
+/* English (LTR) student UI */
+[dir="ltr"] .modal-actions { flex-direction: row; justify-content: flex-end; }
+[dir="ltr"] .modal-actions .btn { flex: 0 1 auto; }
+.welcome { margin: 2px 0 4px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.resume { margin-top: 10px; }
+.resume-info { font-size: 13px; color: var(--muted); background: var(--surface2); border-radius: 10px; padding: 6px 10px; }
+.resume .link { display: block; margin: 2px auto 0; }
+.pausebtn { flex: none; }
+.center { text-align: center; }
+.track-label { padding: 0 54px 0 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+@media (max-width: 420px) { .rtitle b { font-size: 14px; } .pausebtn { padding: 4px 10px; } }
+.track-label { display: block !important; line-height: 52px; text-align: center; }
