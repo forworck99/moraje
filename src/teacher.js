@@ -141,6 +141,7 @@ function assignTab(app, stu, days, today) {
   const list = app.assignments.slice().sort((a, b) => (b.start || '').localeCompare(a.start || '') || TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type));
   return h('section', {},
     h('button', { class: 'btn primary block', onclick: () => editAssignment(app, stu) }, '+ واجب جديد'),
+    list.length ? h('button', { class: 'btn ghost block', onclick: () => scheduleAll(app, list) }, '📅 جدولة كل الواجبات (تاريخ البداية وعدد الأيام)') : null,
     h('button', { class: 'btn ghost block', onclick: () => resetAll(app, stu) }, '⟲ تصفير كل شيء لهذه الطالبة'),
     stu.resetAt ? h('p', { class: 'muted center' }, `آخر تصفير كامل: ${shortDate(todayStr(new Date(stu.resetAt)))} ${fmtTime(stu.resetAt)}`) : null,
     h('div', { class: 'alist' }, list.map(a => {
@@ -161,6 +162,22 @@ function assignTab(app, stu, days, today) {
         h('li', {}, 'الحفظ القديم: صفحة، 15 مرة يوميًا.'),
         h('li', {}, 'الحفظ الحديث والمراجعة: تسحب الطالبة بعد إكمال كل صفحة، فتعرف كم صفحة قرأت من النطاق.'),
         h('li', {}, '«تصفير» بجانب الواجب: يصفّر عدّاده ووقته وسجله. «تصفير كل شيء»: يصفّر كل النتائج، ومنها أوقات الدخول والخروج.'))));
+}
+
+async function scheduleAll(app, list) {
+  const tomorrow = addDays(todayStr(), 1);
+  const st = h('input', { class: 'inp', type: 'date', value: tomorrow });
+  const n = h('input', { class: 'inp num', type: 'number', min: 1, max: 60, value: 5, inputmode: 'numeric' });
+  const info = h('div', { class: 'preview' });
+  const upd = () => { const k = Math.max(1, +n.value || 1); info.textContent = `من ${shortDate(st.value)} إلى ${shortDate(addDays(st.value, k - 1))} · ${k} أيام · ${list.length} واجبات`; };
+  st.addEventListener('input', upd); n.addEventListener('input', upd); upd();
+  const ok = await modal({ title: 'جدولة كل الواجبات', dismissable: false,
+    body: h('div', { class: 'form' }, h('label', {}, 'تبدأ من', st), h('label', {}, 'عدد الأيام', n), info, h('small', { class: 'muted' }, 'نفس الواجبات كل يوم، وتُفعَّل كلها.')),
+    actions: [{ label: 'إلغاء', value: false, kind: 'ghost' }, { label: 'حفظ', value: true, kind: 'primary' }] });
+  if (!ok) return;
+  const k = Math.max(1, +n.value || 1);
+  for (const a of list) await app.store.saveAssignment({ id: a.id, start: st.value, end: addDays(st.value, k - 1), active: true });
+  toast('جُدولت الواجبات ✓');
 }
 
 async function resetAll(app, stu) {

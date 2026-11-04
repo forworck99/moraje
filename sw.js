@@ -1,6 +1,6 @@
 // Service worker: app shell offline, Mushaf fonts cached on first use
-const VER = 'moraje-v4';
-const SHELL = ['./', 'index.html', 'styles.css?v=4', 'app.js?v=4', 'data/mushaf.json', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VER = 'moraje-v5';
+const SHELL = ['./', 'index.html', 'styles.css?v=5', 'app.js?v=5', 'data/mushaf.json', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 const CDN = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
