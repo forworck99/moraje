@@ -267,3 +267,5 @@ html.fallback .fb-head { font-family: 'Amiri Quran', serif; font-size: calc(var(
 .track-label { padding: 0 54px 0 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
 @media (max-width: 420px) { .rtitle b { font-size: 14px; } .pausebtn { padding: 4px 10px; } }
 .track-label { display: block !important; line-height: 52px; text-align: center; }
+/* verses of other surahs on shared pages (end of Fatir, start of Al-Ahqaf) are blanked so they do not distract */
+.w.out, .line.out { visibility: hidden; pointer-events: none; }

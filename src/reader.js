@@ -232,7 +232,7 @@ export function openReader(ctx) {
   }
   function queueFor() {
     if (scope === 'assignment' && A) return rangeVerses(A.from, A.to);
-    if (scope === 'page') return views[vi].flatMap(pageVerses).filter((v, i, a) => a.indexOf(v) === i);
+    if (scope === 'page') return views[vi].flatMap(pageVerses).filter((v, i, a) => a.indexOf(v) === i && allVerses().includes(v));
     if (scope === 'surah') {
       const s = (player.current || views[vi].flatMap(pageVerses).find(v => allVerses().includes(v)) || '36:1').split(':')[0];
       return rangeVerses(`${s}:1`, `${s}:${surahVerses(+s)}`);

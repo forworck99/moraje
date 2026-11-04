@@ -1,5 +1,5 @@
 // Mushaf page rendering with exact Madinah line layout (QCF4 glyph fonts)
-import { mushaf, FONT_CDN, juzOf, pageSurahNames, surahName, surahNameEn, arNum } from './data.js';
+import { SURAH_ORDER, mushaf, FONT_CDN, juzOf, pageSurahNames, surahName, surahNameEn, arNum } from './data.js';
 import { h } from './ui.js';
 
 let fallback = false;
@@ -39,13 +39,14 @@ export function fontsForPages(pages) {
 
 export function renderPage(p, en) {
   const pg = mushaf().pages[p];
-  const names = pageSurahNames(p).map(en ? surahNameEn : surahName).filter(Boolean).join(' · ');
+  const inApp = su => SURAH_ORDER.includes(+su);
+  const names = pageSurahNames(p).filter(inApp).map(en ? surahNameEn : surahName).filter(Boolean).join(' · ');
   const body = h('div', { class: 'page-body', style: { fontFamily: `'${pg.font}'` } });
   for (const line of pg.lines) {
     const t = line[0][1];
     if (t === 'h') {
       const w = line[0];
-      body.append(h('div', { class: 'line hd' },
+      body.append(h('div', { class: 'line hd' + (inApp(line[0][3]) ? '' : ' out') },
         h('div', { class: 'sframe' }, fallback
           ? h('span', { class: 'fb-head' }, `سورة ${surahName(+w[3])}`)
           : h('span', { class: 'glyph', style: { fontFamily: `'${w[2]}'` } }, w[0]))));
@@ -53,7 +54,7 @@ export function renderPage(p, en) {
     }
     if (t === 'b') {
       const w = line[0];
-      body.append(h('div', { class: 'line bs' }, fallback
+      body.append(h('div', { class: 'line bs' + (inApp(line[0][3]) ? '' : ' out') }, fallback
         ? h('span', { class: 'fb-bism' }, 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ')
         : h('span', { class: 'glyph', style: { fontFamily: `'${w[2]}'` } }, w[0])));
       continue;
@@ -68,7 +69,7 @@ export function renderPage(p, en) {
         else content = '۞';
       }
       ln.append(h('span', {
-        class: 'w' + (type === 'e' ? ' end' : type === 'q' ? ' qtr' : ''),
+        class: 'w' + (type === 'e' ? ' end' : type === 'q' ? ' qtr' : '') + (vk && !inApp(vk.split(':')[0]) ? ' out' : ''),
         'data-vk': vk || '', 'data-pos': pos ?? '', 'data-t': type
       }, content));
     }
