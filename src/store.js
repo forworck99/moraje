@@ -123,6 +123,15 @@ function firebaseStore() {
       }
       return id;
     },
+    async deleteRecording(uid, id, eventId) {
+      for (let i = 0; i < 100; i++) {
+        const r = doc(db, 'users', uid, 'events', `${id}_${i}`);
+        const c = await getDoc(r);
+        if (!c.exists()) break;
+        await deleteDoc(r);
+      }
+      if (eventId) await deleteDoc(doc(db, 'users', uid, 'events', eventId));
+    },
     async getRecording(uid, id) {
       const parts = []; let mime = 'audio/mp4';
       for (let i = 0; ; i++) {
@@ -194,6 +203,7 @@ function mockStore(role) {
       try { localStorage.setItem('rec:' + id, b64); } catch { }
       return id;
     },
+    async deleteRecording(uid, id, eid) { localStorage.removeItem('rec:' + id); st.events[uid] = (st.events[uid] || []).filter(e => e.id !== eid); save(); },
     async getRecording(uid, id) { const u = localStorage.getItem('rec:' + id); return u ? await (await fetch(u)).blob() : null; },
     logEvent(u, type, data = {}) {
       const now = Date.now();

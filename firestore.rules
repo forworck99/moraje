@@ -9,6 +9,11 @@ service cloud.firestore {
     }
     function ownsOrTeacher(uid) { return signedIn() && (request.auth.uid == uid || isTeacher()); }
 
+    // The teacher has full control of everything (read, edit, delete), including recordings and logs
+    match /{document=**} {
+      allow read, write: if isTeacher();
+    }
+
     // Student profiles
     match /users/{uid} {
       allow read: if ownsOrTeacher(uid);

@@ -125,12 +125,20 @@ function logTab(app, stu, days, today) {
           } catch (x) { console.warn(x); toast((x?.code || '').includes('permission') ? 'حدّث قواعد الأمان أولًا (تبويب الواجبات)' : 'تعذّر تحميل التسجيل'); btn.disabled = false; btn.textContent = '▶ استماع'; }
         }
       }, '▶ استماع');
+      const del = h('button', {
+        class: 'btn danger-ghost sm', onclick: async () => {
+          if (!await confirmBox('حذف التسجيل', 'حذف هذا التسجيل نهائيًا؟ سيُحذف الصوت ويُنقص العدّاد واحدًا.', 'حذف', 'إلغاء', 'danger')) return;
+          if (!await confirmBox('تأكيد نهائي', 'لا يمكن التراجع عن الحذف. متأكد؟', 'نعم، احذف', 'تراجع', 'danger')) return;
+          try { await app.store.deleteRecording(stu.id, e.recId, e.eid); toast('حُذف التسجيل ✓'); }
+          catch (x) { console.warn(x); toast((x?.code || '').includes('permission') ? 'حدّث قواعد الأمان أولًا (تبويب الواجبات)' : 'تعذّر الحذف'); }
+        }
+      }, '🗑 حذف');
       player.append(btn);
       return h('li', { class: 'lg-count' + (e.suspicious ? ' sus' : '') },
         h('span', { class: 'lt' }, fmtTime(e.t)),
         h('div', {}, h('b', {}, `🎙 تسميع رقم ${e.n}`), ` · ${aName(e.aid)}`,
           h('div', { class: 'muted' }, `مدة التسجيل ${fmtDur(e.sec)}`, e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ قصير جدًا (أقل من ${fmtDur(e.minSec)})`) : ''),
-          player));
+          player, h('div', { class: 'recdel' }, del)));
     }
     if (e.kind === 'page') return h('li', { class: 'lg-count' + (e.suspicious ? ' sus' : '') },
       h('span', { class: 'lt' }, fmtTime(e.t)),

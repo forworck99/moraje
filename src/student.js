@@ -64,7 +64,7 @@ export function studentHome(app) {
     act.length ? h('section', { class: 'cards' }, act.map(card))
       : h('div', { class: 'empty' }, h('div', { class: 'em' }, '📖'), h('p', {}, 'No assignments yet. They will appear here when your teacher adds them.')),
     h('button', { class: 'btn ghost block', onclick: () => openReader({ app, role: 'student', onBack: () => app.render() }) }, '📖 Browse the Mushaf & listen'),
-    h('p', { class: 'muted center', style: { fontSize: '11px' } }, 'v12')
+    h('p', { class: 'muted center', style: { fontSize: '11px' } }, 'v13')
   ));
 }
 

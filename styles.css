@@ -287,3 +287,4 @@ html.fallback .fb-head { font-family: 'Amiri Quran', serif; font-size: calc(var(
 .reader.hide-text .page-body .line { filter: blur(9px); user-select: none; }
 .reader.hide-text .page-body .line.hd, .reader.hide-text .page-body .line.bs { filter: none; }
 .peek { margin-top: 4px; }
+.recdel { margin-top: 6px; }

@@ -60,7 +60,7 @@ export function breakdown(evs, assignments, resetAll = 0) {
       d.counts[aid] = (d.counts[aid] || 0) + 1;
       const suspicious = (e.sec || 0) < (e.minSec || 0);
       if (suspicious) d.flags++;
-      d.log.push({ kind: 'rec', t, aid, n: d.counts[aid], sec: e.sec, recId: e.recId, minSec: e.minSec, suspicious });
+      d.log.push({ kind: 'rec', t, aid, n: d.counts[aid], sec: e.sec, recId: e.recId, eid: e.id, minSec: e.minSec, suspicious });
     } else if (e.type === 'count_adjust') {
       const aid = e.assignmentId;
       d.counts[aid] = Math.max(0, (d.counts[aid] || 0) + (e.delta || 0));
