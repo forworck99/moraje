@@ -108,26 +108,30 @@ function firebaseStore() {
     async saveTest(t) { const { id, ...data } = t; if (id) await setDoc(doc(db, 'tests', id), data); else await addDoc(collection(db, 'tests'), { ...data, createdAt: serverTimestamp() }); },
     async deleteTest(id) { await deleteDoc(doc(db, 'tests', id)); },
 
+    // Audio is stored as chunk documents inside the student's own (append-only) event log,
+    // so it works with the existing security rules. day '0000' keeps chunks out of every report query.
     async saveRecording(meta, blob) {
-      const id = `${meta.studentUid}_${Date.now()}`;
+      const uid = meta.studentUid;
+      const id = `rec_${Date.now()}`;
       const buf = new Uint8Array(await blob.arrayBuffer());
       const n = Math.ceil(buf.length / CHUNK) || 1;
-      await setDoc(doc(db, 'recordings', id), { ...meta, size: buf.length, chunks: n, createdAt: serverTimestamp() });
       for (let i = 0; i < n; i++) {
-        await setDoc(doc(db, 'recordings', id, 'chunks', String(i)), { i, data: Bytes.fromUint8Array(buf.subarray(i * CHUNK, (i + 1) * CHUNK)) });
+        await setDoc(doc(db, 'users', uid, 'events', `${id}_${i}`), {
+          type: 'rec_chunk', day: '0000', ts: serverTimestamp(), i, n, mime: meta.mime || 'audio/mp4',
+          data: Bytes.fromUint8Array(buf.subarray(i * CHUNK, (i + 1) * CHUNK))
+        });
       }
       return id;
     },
-    async getRecording(id) {
-      const m = await getDoc(doc(db, 'recordings', id));
-      if (!m.exists()) return null;
-      const meta = m.data();
-      const parts = [];
-      for (let i = 0; i < meta.chunks; i++) {
-        const c = await getDoc(doc(db, 'recordings', id, 'chunks', String(i)));
-        if (c.exists()) parts.push(c.data().data.toUint8Array());
+    async getRecording(uid, id) {
+      const parts = []; let mime = 'audio/mp4';
+      for (let i = 0; ; i++) {
+        const c = await getDoc(doc(db, 'users', uid, 'events', `${id}_${i}`));
+        if (!c.exists()) break;
+        const d = c.data(); mime = d.mime || mime; parts.push(d.data.toUint8Array());
+        if (i + 1 >= d.n) break;
       }
-      return new Blob(parts, { type: meta.mime || 'audio/mp4' });
+      return parts.length ? new Blob(parts, { type: mime }) : null;
     },
     logEvent(uid, type, data = {}) {
       const now = new Date();
@@ -190,7 +194,7 @@ function mockStore(role) {
       try { localStorage.setItem('rec:' + id, b64); } catch { }
       return id;
     },
-    async getRecording(id) { const u = localStorage.getItem('rec:' + id); return u ? await (await fetch(u)).blob() : null; },
+    async getRecording(uid, id) { const u = localStorage.getItem('rec:' + id); return u ? await (await fetch(u)).blob() : null; },
     logEvent(u, type, data = {}) {
       const now = Date.now();
       (st.events[u] ||= []).push({ id: id(), type, ...data, day: todayStr(new Date(now)), clientTs: now, ts: now });

@@ -118,7 +118,7 @@ function logTab(app, stu, days, today) {
         class: 'btn primary sm', onclick: async () => {
           btn.disabled = true; btn.textContent = '…جارٍ التحميل';
           try {
-            const blob = await app.store.getRecording(e.recId);
+            const blob = await app.store.getRecording(stu.id, e.recId);
             if (!blob) { toast('التسجيل غير موجود'); btn.remove(); return; }
             const au = h('audio', { controls: true, src: URL.createObjectURL(blob) });
             player.replaceChildren(au); au.play().catch(() => { });
