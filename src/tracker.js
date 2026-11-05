@@ -1,5 +1,6 @@
 // Active-time tracking per page (pauses when idle 60s or app hidden, unless audio is playing)
-export const IDLE_MS = 60000;
+export const IDLE_MS = 60000;            // on the home screen
+export const READ_IDLE_MS = 5 * 60000;   // in the Mushaf: reading a page silently can take minutes without touching
 
 export class Tracker {
   constructor(store, uid) {
@@ -19,12 +20,12 @@ export class Tracker {
     });
     addEventListener('pagehide', () => { this.flush(); this.store.logEvent(this.uid, 'session_end', { sec: Math.round(this.sessionSec) }); });
     this.timer = setInterval(() => this.tick(), 1000);
-    this.flusher = setInterval(() => this.flush(), 60000);
+    this.flusher = setInterval(() => this.flush(), 20000);   // teacher sees time almost live
     this.store.logEvent(uid, 'session_start', { ua: navigator.userAgent.slice(0, 160), w: innerWidth, h: innerHeight });
   }
   isActive() {
     const visible = document.visibilityState === 'visible';
-    return this.audioOn || (visible && Date.now() - this.lastAct < IDLE_MS);
+    return this.audioOn || (visible && Date.now() - this.lastAct < (this.pages.length ? READ_IDLE_MS : IDLE_MS));
   }
   tick() {
     if (!this.isActive()) return;
