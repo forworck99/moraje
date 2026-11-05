@@ -6,7 +6,7 @@ import {
 } from './data.js';
 import { renderPage, layoutPage, decorate, ensureFonts, fontsForPages } from './mushaf.js';
 import { RECITERS } from './audio.js';
-import { TYPES, isPageMode, targetOf, unitOf, unitEn } from './types.js';
+import { TYPES, isPageMode, isRecordMode, targetOf, unitOf, unitEn } from './types.js';
 import { todayStr } from './store.js';
 
 // where the student stopped in an assignment (kept on this device)
@@ -40,6 +40,9 @@ export function openReader(ctx) {
   let scopeSel, fromS, fromA, toS, toA, ayahRepI, rangeRepI, recBtn, playBtn, statusEl, customRow;
   let cntNum, cntBar, cntTime, cntLabel, cntTrack, cntPages;
   const PM = A ? isPageMode(A) : false;
+  const RM = A ? isRecordMode(A) : false;
+  let rec = null, recChunks = [], recStart = 0, recTimer = null, recBlob = null, recSec = 0, recStream = null;
+  let rBtn, rTime, rPreview, rSend, rRedo, rInfo;
   let lastErr = 0;
 
   const buildViews = () => {
@@ -66,7 +69,7 @@ export function openReader(ctx) {
     h('button', { class: 'navbtn prev', 'aria-label': L('الصفحة السابقة', 'Previous page'), onclick: () => go(vi - 1) }, '›'),
     h('button', { class: 'navbtn next', 'aria-label': L('الصفحة التالية', 'Next page'), onclick: () => go(vi + 1) }, '‹'));
 
-  const counterEl = (A && role === 'student') ? buildCounter() : null;
+  const counterEl = (A && role === 'student') ? (RM ? buildRecorder() : buildCounter()) : null;
   const playerEl = buildPlayer();
   const root = h('div', { class: 'reader' + (A ? ' has-a' : '') },
     h('header', { class: 'rbar' },
@@ -75,6 +78,7 @@ export function openReader(ctx) {
       (A && EN) ? h('button', { class: 'btn ghost sm pausebtn', onclick: () => pauseLesson() }, '⏸ Pause') : null,
       pageSel),
     stage, counterEl, playerEl);
+  if (RM && EN) root.classList.add('hide-text');
   if (A) root.style.setProperty('--rg', TYPES[A.type]?.tint || 'rgba(46,125,50,.14)');
 
   app.mount(root);
@@ -344,6 +348,87 @@ export function openReader(ctx) {
     await app.store.logEvent(app.user.uid, 'count_adjust', { assignmentId: A.id, delta, from: n, to });
     toast('Count corrected');
   }
+  /* ---------- recitation recorder (only for the recitation type) ---------- */
+  function pickMime() {
+    for (const m of ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'])
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported?.(m)) return m;
+    return '';
+  }
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  function buildRecorder() {
+    cntNum = h('b', {}, '0');
+    cntBar = h('div', { class: 'bar' }, h('i'));
+    cntTime = h('small', {});
+    rTime = h('span', { class: 'rtime' }, '0:00');
+    rBtn = h('button', { class: 'recbtn', onclick: () => rec ? stopRec() : startRec() }, '● Record');
+    rPreview = h('audio', { controls: true, class: 'rprev' });
+    rSend = h('button', { class: 'btn primary sm', onclick: sendRec }, '✓ Send to teacher');
+    rRedo = h('button', { class: 'btn ghost sm', onclick: () => { recBlob = null; showRecUI(); } }, '↺ Record again');
+    rInfo = h('div', { class: 'rinfo' }, '🎙 Recite from memory, then tap Record. Your recording goes to your teacher.');
+    const peek = h('button', { class: 'btn ghost sm peek', onclick: () => { const on = root.classList.toggle('hide-text'); peek.textContent = on ? '👁 Show text' : '🙈 Hide text'; app.store.logEvent(app.user.uid, on ? 'text_hidden' : 'text_shown', { assignmentId: A.id }); } }, '👁 Show text');
+    rInfo.append(' ', peek);
+    const box = h('div', { class: 'counter recorder' },
+      h('div', { class: 'cinfo' }, h('div', {}, cntNum, ` / ${targetOf(A)}`, h('small', {}, ' today')), cntBar, cntTime),
+      h('div', { class: 'rmain' }, rBtn, rTime),
+      h('div', { class: 'rafter' }, rPreview, h('div', { class: 'ract' }, rRedo, rSend)),
+      rInfo);
+    return box;
+  }
+  function showRecUI() {
+    const after = counterEl.querySelector('.rafter');
+    after.style.display = recBlob ? '' : 'none';
+    counterEl.querySelector('.rmain').style.display = recBlob ? 'none' : '';
+    rBtn.textContent = rec ? '■ Stop' : '● Record';
+    rBtn.classList.toggle('on', !!rec);
+    if (!rec && !recBlob) rTime.textContent = '0:00';
+  }
+  async function startRec() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Recording is not supported on this browser'); return; }
+    try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch { toast('Please allow the microphone to record'); return; }
+    player.pause();
+    const mime = pickMime();
+    rec = new MediaRecorder(recStream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+    recChunks = [];
+    rec.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+    rec.onstop = () => {
+      recBlob = new Blob(recChunks, { type: rec.mimeType || mime || 'audio/mp4' });
+      recSec = Math.round((Date.now() - recStart) / 1000);
+      recStream.getTracks().forEach(t => t.stop());
+      rec = null; clearInterval(recTimer);
+      rPreview.src = URL.createObjectURL(recBlob);
+      showRecUI();
+    };
+    rec.start(1000);
+    recStart = Date.now();
+    app.tracker?.setAudio(true);
+    recTimer = setInterval(() => {
+      const t = (Date.now() - recStart) / 1000;
+      rTime.textContent = mmss(t);
+      if (t > 15 * 60) stopRec();          // safety limit: 15 minutes
+    }, 250);
+    showRecUI();
+  }
+  function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); app.tracker?.setAudio(false); }
+  async function sendRec() {
+    if (!recBlob) return;
+    const minSec = Math.max(15, Math.round(rangeWordCount(A.from, A.to) * 0.45));
+    if (!await confirmBox('Send recitation', `Send this ${mmss(recSec)} recording of ${rangeLabelEn(A.from, A.to)} to your teacher?`, 'Yes, send', 'Cancel')) return;
+    rSend.disabled = true; rSend.textContent = 'Sending…';
+    try {
+      const id = await app.store.saveRecording({ studentUid: app.user.uid, assignmentId: A.id, sec: recSec, mime: recBlob.type, from: A.from, to: A.to }, recBlob);
+      await app.store.logEvent(app.user.uid, 'recording', { assignmentId: A.id, recId: id, sec: recSec, size: recBlob.size, minSec });
+      const n = curCount() + 1;
+      toast(n >= targetOf(A) ? 'Sent ✓ Well done! 🌟' : `Recording ${n} sent ✓`);
+      recBlob = null; showRecUI();
+    } catch (e) {
+      console.warn(e);
+      toast('Could not send. Check your internet and try again.');
+    }
+    rSend.disabled = false; rSend.textContent = '✓ Send to teacher';
+  }
+  cleanups.push(() => { try { stopRec(); recStream?.getTracks().forEach(t => t.stop()); } catch { } clearInterval(recTimer); });
+
   function updCounter() {
     if (!counterEl) return;
     const n = curCount(), t = targetOf(A);
@@ -378,7 +463,10 @@ export function openReader(ctx) {
   let paused = false;
 
   /* ---------- start ---------- */
-  function close() {
+  async function close() {
+    if (RM && (rec || recBlob)) {
+      if (!await confirmBox('Leave?', rec ? 'You are still recording. Leave and lose it?' : 'Your recording is not sent yet. Leave without sending?', 'Leave', 'Stay', 'danger')) return;
+    }
     if (A && EN && !paused) savePos(A.id, position());
     cleanups.forEach(f => f());
     player.stop();
@@ -396,6 +484,7 @@ export function openReader(ctx) {
   go(Math.max(0, viewOf(startP))).then(() => {
     setQueue(resume?.vk || undefined);
     updPlayer(); updCounter();
+    if (RM && counterEl) showRecUI();
   });
   if (A && role === 'student') {
     app.store.logEvent(app.user.uid, resume ? 'resume' : 'assignment_open', { assignmentId: A.id, page: startP });

@@ -112,6 +112,26 @@ function logTab(app, stu, days, today) {
           e.readSec != null ? ` · وقت فعلي على الصفحة ${fmtDur(e.readSec)}` : '',
           e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ أسرع من المعقول (أقل من ${fmtDur(e.minSec)})`) : '',
           e.skew ? h('span', { class: 'warn' }, ' · سُجّلت دون إنترنت') : '')));
+    if (e.kind === 'rec') {
+      const player = h('div', { class: 'recplay' });
+      const btn = h('button', {
+        class: 'btn primary sm', onclick: async () => {
+          btn.disabled = true; btn.textContent = '…جارٍ التحميل';
+          try {
+            const blob = await app.store.getRecording(e.recId);
+            if (!blob) { toast('التسجيل غير موجود'); btn.remove(); return; }
+            const au = h('audio', { controls: true, src: URL.createObjectURL(blob) });
+            player.replaceChildren(au); au.play().catch(() => { });
+          } catch (x) { console.warn(x); toast((x?.code || '').includes('permission') ? 'حدّث قواعد الأمان أولًا (تبويب الواجبات)' : 'تعذّر تحميل التسجيل'); btn.disabled = false; btn.textContent = '▶ استماع'; }
+        }
+      }, '▶ استماع');
+      player.append(btn);
+      return h('li', { class: 'lg-count' + (e.suspicious ? ' sus' : '') },
+        h('span', { class: 'lt' }, fmtTime(e.t)),
+        h('div', {}, h('b', {}, `🎙 تسميع رقم ${e.n}`), ` · ${aName(e.aid)}`,
+          h('div', { class: 'muted' }, `مدة التسجيل ${fmtDur(e.sec)}`, e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ قصير جدًا (أقل من ${fmtDur(e.minSec)})`) : ''),
+          player));
+    }
     if (e.kind === 'page') return h('li', { class: 'lg-count' + (e.suspicious ? ' sus' : '') },
       h('span', { class: 'lt' }, fmtTime(e.t)),
       h('div', {}, h('b', {}, `📄 قرأت صفحة ${e.page}`), ` (${e.n}) · ${aName(e.aid)}`,
@@ -121,6 +141,7 @@ function logTab(app, stu, days, today) {
           e.again ? ' · سبق تسجيلها اليوم' : '',
           e.suspicious ? h('span', { class: 'warn' }, ` · ⚠️ أسرع من المعقول (أقل من ${fmtDur(e.minSec)})`) : '')));
     if (e.kind === 'pundo') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ ألغت تسجيل صفحة ${e.page}`), ` · ${aName(e.aid)}`));
+    if (e.kind === 'peek') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `👁 أظهرت النص أثناء التسميع · ${aName(e.aid)}`));
     if (e.kind === 'pause') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `⏸ أوقفت الدرس عند صفحة ${e.page}${e.vk ? ` (آية ${e.vk.split(':')[1]})` : ''} · ${aName(e.aid)}`));
     if (e.kind === 'resume') return h('li', { class: 'lg-open' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, `▶ استأنفت الدرس من صفحة ${e.page} · ${aName(e.aid)}`));
     if (e.kind === 'adjust') return h('li', { class: 'lg-adj' }, h('span', { class: 'lt' }, fmtTime(e.t)), h('div', {}, h('b', {}, `✎ تعديل العدد من ${e.from} إلى ${e.to}`), ` · ${aName(e.aid)}`));
@@ -143,6 +164,7 @@ function assignTab(app, stu, days, today) {
     h('button', { class: 'btn primary block', onclick: () => editAssignment(app, stu) }, '+ واجب جديد'),
     list.length ? h('button', { class: 'btn ghost block', onclick: () => scheduleAll(app, list) }, '📅 جدولة كل الواجبات (تاريخ البداية وعدد الأيام)') : null,
     h('button', { class: 'btn ghost block', onclick: () => resetAll(app, stu) }, '⟲ تصفير كل شيء لهذه الطالبة'),
+    h('button', { class: 'btn ghost block', onclick: () => modal({ title: 'قواعد الأمان', body: rulesCard(app), actions: [{ label: 'إغلاق', value: 0, kind: 'ghost' }] }) }, '🛡️ تحديث قواعد الأمان'),
     stu.resetAt ? h('p', { class: 'muted center' }, `آخر تصفير كامل: ${shortDate(todayStr(new Date(stu.resetAt)))} ${fmtTime(stu.resetAt)}`) : null,
     h('div', { class: 'alist' }, list.map(a => {
       const T = TYPES[a.type];
@@ -150,7 +172,7 @@ function assignTab(app, stu, days, today) {
       return h('div', { class: 'aitem' + (cur ? '' : ' off'), style: { '--tc': T.color } },
         h('div', {}, h('span', { class: 'tag sm' }, T.label), cur ? h('span', { class: 'live' }, 'جارٍ') : h('span', { class: 'muted' }, a.active === false ? ' موقوف' : ' خارج المدة'),
           h('h4', {}, rangeLabel(a.from, a.to)),
-          h('small', { class: 'muted' }, `${isPageMode(a) ? `كل صفحة مرة (${targetOf(a)} صفحة)` : `${targetOf(a)} مرة`} يوميًا${a.resetAt ? ` · صُفِّر ${shortDate(todayStr(new Date(a.resetAt)))}` : ''} · ${a.start ? shortDate(a.start) : ''} – ${a.end ? shortDate(a.end) : '…'} · صفحات ${(p => p.length > 4 ? p[0] + '–' + p[p.length - 1] : p.join('، '))(rangePages(a.from, a.to))}`)),
+          h('small', { class: 'muted' }, `${isPageMode(a) ? `كل صفحة مرة (${targetOf(a)} صفحة)` : `${targetOf(a)} ${unitOf(a)}`} يوميًا${a.resetAt ? ` · صُفِّر ${shortDate(todayStr(new Date(a.resetAt)))}` : ''} · ${a.start ? shortDate(a.start) : ''} – ${a.end ? shortDate(a.end) : '…'} · صفحات ${(p => p.length > 4 ? p[0] + '–' + p[p.length - 1] : p.join('، '))(rangePages(a.from, a.to))}`)),
         h('div', { class: 'aact' },
           h('button', { class: 'btn ghost sm', onclick: () => editAssignment(app, stu, a) }, 'تعديل'),
           h('button', { class: 'btn ghost sm', onclick: () => resetCounters(app, [a]) }, 'تصفير'),
@@ -216,7 +238,8 @@ function editAssignment(app, stu, a) {
     h('option', { value: 'range', selected: modeOf(v) === 'range' }, 'عدّ قراءة النطاق كاملًا (مثل 15 مرة)'),
     h('option', { value: 'page', selected: modeOf(v) === 'page' }, 'كل صفحة مرة: تسحب بعد إكمال كل صفحة'));
   const targetLbl = h('label', {}, 'المطلوب يوميًا', target);
-  const syncMode = () => { targetLbl.style.display = modeSel.value === 'page' ? 'none' : ''; };
+  const modeLbl = h('label', {}, 'طريقة العدّ', modeSel);
+  const syncMode = () => { const rc = typeSel.value === 'recite'; modeLbl.style.display = rc ? 'none' : ''; targetLbl.firstChild.textContent = rc ? 'عدد التسميعات المطلوبة يوميًا' : 'المطلوب يوميًا'; targetLbl.style.display = (!rc && modeSel.value === 'page') ? 'none' : ''; };
   modeSel.addEventListener('change', syncMode);
   const preview = h('div', { class: 'preview' });
   const read = () => {
@@ -227,7 +250,7 @@ function editAssignment(app, stu, a) {
   };
   const upd = () => { const r = read(); preview.textContent = `${rangeLabel(r.from, r.to)} · صفحات ${rangePages(r.from, r.to).join('، ')}`; };
   [fS, fA, tS, tA].forEach(x => x.addEventListener('input', upd));
-  typeSel.addEventListener('change', () => { target.value = TYPES[typeSel.value].target; modeSel.value = modeOf({ type: typeSel.value }); syncMode(); });
+  typeSel.addEventListener('change', () => { target.value = TYPES[typeSel.value].target; if (typeSel.value !== 'recite') modeSel.value = modeOf({ type: typeSel.value }); syncMode(); });
   syncMode();
   upd();
   const body = h('div', { class: 'form' },
@@ -235,7 +258,7 @@ function editAssignment(app, stu, a) {
     h('div', { class: 'frow' }, h('label', {}, 'من سورة', fS), h('label', {}, 'آية', fA)),
     h('div', { class: 'frow' }, h('label', {}, 'إلى سورة', tS), h('label', {}, 'آية', tA)),
     preview,
-    h('label', {}, 'طريقة العدّ', modeSel),
+    modeLbl,
     h('div', { class: 'frow' }, targetLbl, h('label', {}, 'تكرار الآية في التلاوة', ar), h('label', {}, 'تكرار النطاق', rr)),
     h('div', { class: 'frow' }, h('label', {}, 'من تاريخ', st), h('label', {}, 'إلى تاريخ', en)),
     h('label', {}, 'ملاحظة', note),
@@ -246,7 +269,7 @@ function editAssignment(app, stu, a) {
       const r = read();
       await app.store.saveAssignment({
         id: a?.id, studentUid: stu.id, type: typeSel.value, from: r.from, to: r.to,
-        mode: modeSel.value, target: Math.max(1, +target.value || 1), ayahRepeat: Math.max(1, +ar.value || 1), rangeRepeat: Math.max(0, +rr.value || 0),
+        mode: typeSel.value === 'recite' ? 'record' : modeSel.value, target: Math.max(1, +target.value || 1), ayahRepeat: Math.max(1, +ar.value || 1), rangeRepeat: Math.max(0, +rr.value || 0),
         start: st.value || today, end: en.value || '', note: note.value.trim(), active: active.checked
       });
       toast('حُفظ الواجب ✓');

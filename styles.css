@@ -269,3 +269,21 @@ html.fallback .fb-head { font-family: 'Amiri Quran', serif; font-size: calc(var(
 .track-label { display: block !important; line-height: 52px; text-align: center; }
 /* verses of other surahs on shared pages (end of Fatir, start of Al-Ahqaf) are blanked so they do not distract */
 .w.out, .line.out { visibility: hidden; pointer-events: none; }
+
+/* recitation recorder */
+.counter.recorder { grid-template-columns: auto 1fr; }
+.recorder .rmain { display: flex; align-items: center; gap: 12px; justify-content: center; }
+.recbtn { border: 0; border-radius: 26px; height: 52px; padding: 0 22px; font-size: 17px; font-weight: 700; background: #b23a48; color: #fff; cursor: pointer; }
+.recbtn.on { animation: pulse 1.2s infinite; background: #8e2433; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(178,58,72,.25); } }
+.rtime { font-size: 20px; font-variant-numeric: tabular-nums; font-weight: 700; color: #b23a48; }
+.recorder .rafter { display: grid; gap: 6px; }
+.rprev { width: 100%; height: 40px; }
+.ract { display: flex; gap: 6px; justify-content: flex-end; }
+.rinfo { grid-column: 1 / -1; font-size: 12px; color: var(--muted); text-align: center; }
+.recplay { margin-top: 6px; }
+.recplay audio { width: 100%; height: 40px; }
+.modal .setup { box-shadow: none; padding: 0; margin: 0; }
+.reader.hide-text .page-body .line { filter: blur(9px); user-select: none; }
+.reader.hide-text .page-body .line.hd, .reader.hide-text .page-body .line.bs { filter: none; }
+.peek { margin-top: 4px; }

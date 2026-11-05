@@ -51,7 +51,7 @@ export function studentHome(app) {
           h('div', { class: 'resume-info' }, `⏸ Stopped at page ${pos.page}${pos.vk ? `, ayah ${pos.vk.split(':')[1]}` : ''} · ${pos.day === today ? fmtTime(pos.at, true) : shortDate(pos.day)}`),
           h('button', { class: 'btn primary block', onclick: () => open(a, pos) }, `▶ Continue from page ${pos.page}`),
           h('button', { class: 'link', onclick: () => { clearPos(a.id); open(a); } }, 'Start from the beginning'))
-        : h('button', { class: 'btn primary block', onclick: () => open(a) }, done ? 'Read again' : 'Start reading'));
+        : h('button', { class: 'btn primary block', onclick: () => open(a) }, done ? (a.type === 'recite' ? 'Recite again' : 'Read again') : (a.type === 'recite' ? '🎙 Start recitation' : 'Start reading')));
   };
 
   const totalToday = Object.values(app.timeToday).reduce((x, y) => x + y, 0);

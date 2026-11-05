@@ -6,8 +6,10 @@ import {
 } from 'firebase/auth';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc,
-  addDoc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, where, serverTimestamp
+  addDoc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, where, serverTimestamp, Bytes
 } from 'firebase/firestore';
+
+const CHUNK = 700 * 1024;   // Firestore documents are limited to 1 MB
 import { firebaseConfig } from '../firebase-config.js';
 
 export const TEACHER_EMAIL = 'forworck99@gmail.com';
@@ -106,6 +108,27 @@ function firebaseStore() {
     async saveTest(t) { const { id, ...data } = t; if (id) await setDoc(doc(db, 'tests', id), data); else await addDoc(collection(db, 'tests'), { ...data, createdAt: serverTimestamp() }); },
     async deleteTest(id) { await deleteDoc(doc(db, 'tests', id)); },
 
+    async saveRecording(meta, blob) {
+      const id = `${meta.studentUid}_${Date.now()}`;
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const n = Math.ceil(buf.length / CHUNK) || 1;
+      await setDoc(doc(db, 'recordings', id), { ...meta, size: buf.length, chunks: n, createdAt: serverTimestamp() });
+      for (let i = 0; i < n; i++) {
+        await setDoc(doc(db, 'recordings', id, 'chunks', String(i)), { i, data: Bytes.fromUint8Array(buf.subarray(i * CHUNK, (i + 1) * CHUNK)) });
+      }
+      return id;
+    },
+    async getRecording(id) {
+      const m = await getDoc(doc(db, 'recordings', id));
+      if (!m.exists()) return null;
+      const meta = m.data();
+      const parts = [];
+      for (let i = 0; i < meta.chunks; i++) {
+        const c = await getDoc(doc(db, 'recordings', id, 'chunks', String(i)));
+        if (c.exists()) parts.push(c.data().data.toUint8Array());
+      }
+      return new Blob(parts, { type: meta.mime || 'audio/mp4' });
+    },
     logEvent(uid, type, data = {}) {
       const now = new Date();
       return addDoc(collection(db, 'users', uid, 'events'), {
@@ -161,6 +184,13 @@ function mockStore(role) {
     watchTests(s, cb) { return sub(() => cb(list('tests', x => x.studentUid === s))); },
     async saveTest(t) { const { id: i, ...d } = t; st.tests[i || id()] = d; save(); },
     async deleteTest(i) { delete st.tests[i]; save(); },
+    async saveRecording(meta, blob) {
+      const id = `${meta.studentUid}_${Date.now()}`;
+      const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      try { localStorage.setItem('rec:' + id, b64); } catch { }
+      return id;
+    },
+    async getRecording(id) { const u = localStorage.getItem('rec:' + id); return u ? await (await fetch(u)).blob() : null; },
     logEvent(u, type, data = {}) {
       const now = Date.now();
       (st.events[u] ||= []).push({ id: id(), type, ...data, day: todayStr(new Date(now)), clientTs: now, ts: now });

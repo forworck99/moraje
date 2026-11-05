@@ -55,6 +55,12 @@ export function breakdown(evs, assignments, resetAll = 0) {
       if (suspicious) d.flags++;
       const skew = e.ts && e.clientTs ? Math.abs(e.ts - e.clientTs) > 10 * 60000 : false;
       d.log.push({ kind: 'count', t, aid, n: d.counts[aid], interval, readSec: e.readSec, minSec, suspicious, skew });
+    } else if (e.type === 'recording') {
+      const aid = e.assignmentId;
+      d.counts[aid] = (d.counts[aid] || 0) + 1;
+      const suspicious = (e.sec || 0) < (e.minSec || 0);
+      if (suspicious) d.flags++;
+      d.log.push({ kind: 'rec', t, aid, n: d.counts[aid], sec: e.sec, recId: e.recId, minSec: e.minSec, suspicious });
     } else if (e.type === 'count_adjust') {
       const aid = e.assignmentId;
       d.counts[aid] = Math.max(0, (d.counts[aid] || 0) + (e.delta || 0));
@@ -85,6 +91,8 @@ export function breakdown(evs, assignments, resetAll = 0) {
       d.log.push({ kind: 'close', t, sec: e.sec });
     } else if (e.type === 'assignment_open') {
       d.log.push({ kind: 'aopen', t, aid: e.assignmentId });
+    } else if (e.type === 'text_shown') {
+      d.log.push({ kind: 'peek', t, aid: e.assignmentId });
     } else if (e.type === 'pause') {
       d.log.push({ kind: 'pause', t, aid: e.assignmentId, page: e.page, vk: e.vk });
     } else if (e.type === 'resume') {

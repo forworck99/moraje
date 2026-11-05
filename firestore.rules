@@ -37,6 +37,18 @@ service cloud.firestore {
       allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
       allow write: if isTeacher();
     }
+    // Recitation recordings: the student creates her own, nobody but the teacher can change or delete
+    match /recordings/{rid} {
+      function owner() { return get(/databases/$(database)/documents/recordings/$(rid)).data.studentUid; }
+      allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.studentUid == request.auth.uid;
+      allow update, delete: if isTeacher();
+      match /chunks/{cid} {
+        allow read: if isTeacher() || (signedIn() && owner() == request.auth.uid);
+        allow create: if signedIn() && owner() == request.auth.uid;
+        allow update, delete: if isTeacher();
+      }
+    }
     match /tests/{id} {
       allow read: if isTeacher() || (signedIn() && resource.data.studentUid == request.auth.uid);
       allow write: if isTeacher();
