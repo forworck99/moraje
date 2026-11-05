@@ -63,7 +63,8 @@ export function studentHome(app) {
       h('p', { class: 'muted' }, `${dayName(today, true)} ${shortDate(today)} · Reading time today: ${fmtDur(totalToday, true)}`)),
     act.length ? h('section', { class: 'cards' }, act.map(card))
       : h('div', { class: 'empty' }, h('div', { class: 'em' }, '📖'), h('p', {}, 'No assignments yet. They will appear here when your teacher adds them.')),
-    h('button', { class: 'btn ghost block', onclick: () => openReader({ app, role: 'student', onBack: () => app.render() }) }, '📖 Browse the Mushaf & listen')
+    h('button', { class: 'btn ghost block', onclick: () => openReader({ app, role: 'student', onBack: () => app.render() }) }, '📖 Browse the Mushaf & listen'),
+    h('p', { class: 'muted center', style: { fontSize: '11px' } }, 'v12')
   ));
 }
 

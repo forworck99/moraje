@@ -423,7 +423,7 @@ export function openReader(ctx) {
       recBlob = null; showRecUI();
     } catch (e) {
       console.warn(e);
-      toast('Could not send. Check your internet and try again.');
+      toast(`Could not send (${e?.code || e?.message || 'error'}). Try again.`, 6000);
     }
     rSend.disabled = false; rSend.textContent = '✓ Send to teacher';
   }
