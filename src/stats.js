@@ -1,3 +1,4 @@
+import { todayStr } from './store.js';
 // Aggregations over the append-only event log
 export function sortEvents(evs) {
   return evs.slice().sort((a, b) => (a.clientTs || 0) - (b.clientTs || 0));
@@ -31,7 +32,10 @@ export function breakdown(evs, assignments, resetAll = 0) {
   for (const e of sortEvents(evs)) {
     if (resetAll && (e.ts || e.clientTs || 0) < resetAll) continue;   // teacher reset everything for this student
     if (before(e, R)) continue;              // teacher reset this assignment (counts, time, opens)
-    const d = days[e.day] ||= { counts: {}, time: {}, listen: 0, total: 0, pages: {}, log: [], first: null, last: null, sessions: 0, flags: 0, done: {} };
+    // group by the VIEWER's local day (student and teacher can be in different time zones)
+    const tt = e.ts || e.clientTs || 0;
+    const dk = tt ? todayStr(new Date(tt)) : e.day;
+    const d = days[dk] ||= { counts: {}, time: {}, listen: 0, total: 0, pages: {}, log: [], first: null, last: null, sessions: 0, flags: 0, done: {} };
     const t = e.ts || e.clientTs;
     d.first = d.first ? Math.min(d.first, t) : t;
     d.last = d.last ? Math.max(d.last, t) : t;
@@ -43,7 +47,7 @@ export function breakdown(evs, assignments, resetAll = 0) {
     } else if (e.type === 'count') {
       const aid = e.assignmentId;
       d.counts[aid] = (d.counts[aid] || 0) + 1;
-      const key = e.day + aid;
+      const key = dk + aid;
       const interval = lastCount[key] ? Math.round((t - lastCount[key]) / 1000) : null;
       lastCount[key] = t;
       const minSec = e.minSec || 0;
@@ -58,7 +62,7 @@ export function breakdown(evs, assignments, resetAll = 0) {
     } else if (e.type === 'page_done') {
       const aid = e.assignmentId;
       const set = d.done[aid] ||= new Set();
-      const key = e.day + aid;
+      const key = dk + aid;
       const interval = lastCount[key] ? Math.round((t - lastCount[key]) / 1000) : null;
       lastCount[key] = t;
       const minSec = e.minSec || 0;

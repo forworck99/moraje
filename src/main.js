@@ -138,7 +138,7 @@ function watchStudent(uid) {
   };
   studentSubs.push(store.watchAssignments(uid, l => { app.assignments = l; recompute(); rer(); }, onErr));
   studentSubs.push(store.watchHighlights(uid, l => { app.marks = new Map(l.map(x => [`${x.vk}:${x.pos}`, x])); rer(); }, onErr));
-  const from = addDays(today, app.role === 'teacher' ? -60 : -6);
+  const from = addDays(today, app.role === 'teacher' ? -61 : -7);   // one extra day for time-zone differences
   studentSubs.push(store.watchEventsSince(uid, from, evs => {
     app.weekEvents = evs;
     recompute();
