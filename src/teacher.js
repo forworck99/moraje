@@ -178,12 +178,15 @@ function assignTab(app, stu, days, today) {
       const T = TYPES[a.type];
       const cur = a.active !== false && (!a.start || a.start <= today) && (!a.end || a.end >= today);
       return h('div', { class: 'aitem' + (cur ? '' : ' off'), style: { '--tc': T.color } },
-        h('div', {}, h('span', { class: 'tag sm' }, T.label), cur ? h('span', { class: 'live' }, 'جارٍ') : h('span', { class: 'muted' }, a.active === false ? ' موقوف' : ' خارج المدة'),
+        h('div', {}, h('span', { class: 'tag sm' }, T.label), cur ? h('span', { class: 'live' }, 'جارٍ') : h('span', { class: 'muted' }, a.active === false ? ' ⏸ معلّق' : ' خارج المدة'),
           h('h4', {}, rangeLabel(a.from, a.to)),
           h('small', { class: 'muted' }, `${isPageMode(a) ? `كل صفحة مرة (${targetOf(a)} صفحة)` : `${targetOf(a)} ${unitOf(a)}`} يوميًا${a.resetAt ? ` · صُفِّر ${shortDate(todayStr(new Date(a.resetAt)))}` : ''} · ${a.start ? shortDate(a.start) : ''} – ${a.end ? shortDate(a.end) : '…'} · صفحات ${(p => p.length > 4 ? p[0] + '–' + p[p.length - 1] : p.join('، '))(rangePages(a.from, a.to))}`)),
         h('div', { class: 'aact' },
           h('button', { class: 'btn ghost sm', onclick: () => editAssignment(app, stu, a) }, 'تعديل'),
           h('button', { class: 'btn ghost sm', onclick: () => resetCounters(app, [a]) }, 'تصفير'),
+          a.active === false
+            ? h('button', { class: 'btn primary sm', onclick: async () => { await app.store.saveAssignment({ id: a.id, active: true }); toast('عاد الواجب للطالبة ✓'); } }, '▶ تفعيل')
+            : h('button', { class: 'btn ghost sm', onclick: async () => { if (await confirmBox('تعليق الواجب', 'سيختفي هذا الواجب من عند الطالبة حتى تعيد تفعيله. لن يُحذف شيء.', 'تعليق')) { await app.store.saveAssignment({ id: a.id, active: false }); toast('عُلِّق الواجب ⏸'); } } }, '⏸ تعليق'),
           h('button', { class: 'btn danger-ghost sm', onclick: async () => { if (await confirmBox('حذف الواجب', 'سيُحذف الواجب، ويبقى سجل قراءاته محفوظًا.', 'حذف', 'إلغاء', 'danger')) { await app.store.deleteAssignment(a.id); toast('حُذف'); } } }, 'حذف')));
     })),
     h('details', { class: 'help' }, h('summary', {}, 'كيف أضبط الواجبات؟'),
